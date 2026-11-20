@@ -28,7 +28,7 @@ import java.time.format.DateTimeFormatter
 
 data class Toast(val title: String, val sub: String = "", val kind: String = "xp")
 
-private data class FileInfo(val mtime: Long, val size: Long, val tasks: List<Task>, val dayKey: String?, val day: Day?, val created: String?)
+private data class FileInfo(val mtime: Long, val size: Long, val tasks: List<Task>, val dayKey: String?, val day: Day?, val created: String?, val workout: Pair<String, Workout>? = null)
 
 /**
  * Everything Stoa knows comes from the vault's markdown files, and everything it changes is written back
@@ -63,6 +63,8 @@ class Engine(private val ctx: Context) {
         private set
     var rpg by mutableStateOf<Rpg?>(null)
         private set
+    var workoutNotes by mutableStateOf<Map<String, Pair<String, Workout>>>(emptyMap())
+        private set
 
     /* ── settings ── */
     val root: File? get() = prefs.vaultPath.takeIf { it.isNotBlank() }?.let { File(it) }?.takeIf { it.isDirectory }
@@ -80,6 +82,7 @@ class Engine(private val ctx: Context) {
     val writingPrefix get() = prefs.str("writingPrefix", "HOTA - ")
     val canvasFolder get() = prefs.str("canvasFolder", "0001 Resources/Canvas")
     val attachments get() = prefs.str("attachmentsFolder", "0001 Resources/Attachments")
+    val workoutsFolder get() = prefs.str("workoutsFolder", "0001 Resources/Workouts")
     private val dashboardNote get() = prefs.str("dashboardNote", "0001 Resources/dashboards/Dashboard-Serendipity-v3.9.0.md")
     private val excludeFolders = listOf("Templates", "Weekly Notes")
 
@@ -171,6 +174,12 @@ class Engine(private val ctx: Context) {
             day = Day(done, present, fm["morning_routine"].asList().toSet(), fm["evening_routine"].asList().toSet(),
                 fm["routines_complete"].asList().map { it.lowercase() }.toSet(), fm["reading_minutes"].asInt() ?: 0, fm["meditation_minutes"].asInt() ?: 0,
                 scanWorkouts(text, workoutHeading.trimStart('#').trim()))
+        } else if (rel.startsWith(workoutsFolder.trim('/') + "/")) {
+            val sp = Frontmatter.split(text); val fm = sp.fm
+            val date = fm["date"]?.toString()?.take(10) ?: Instant.ofEpochMilli(mtime).atZone(ZoneId.systemDefault()).toLocalDate().toString()
+            val meta = listOfNotNull(fm["start"]?.toString(), fm["duration_min"].asInt()?.let { "$it min" }, fm["volume_kg"].asInt()?.takeIf { it > 0 }?.let { String.format(java.util.Locale.US, "%,d kg", it) }).joinToString(" · ")
+            val ex = scanWorkouts(text, "Sets").flatMap { it.ex }
+            return FileInfo(mtime, size, tasks, null, null, null, date to Workout(fm["workout"]?.toString() ?: rel.substringAfterLast('/').substringBefore('_'), meta, ex))
         } else if (!rel.startsWith(clippings.trim('/') + "/") && size >= 200) {
             created = try {
                 val a = Files.readAttributes(f.toPath(), BasicFileAttributes::class.java)
@@ -214,15 +223,16 @@ class Engine(private val ctx: Context) {
         files = m; rebuild()
     }
     private fun rebuild() {
-        val d = HashMap<String, Day>(); val t = HashMap<String, List<Task>>(); val nd = HashMap<String, Int>(); val paths = ArrayList<String>()
+        val d = HashMap<String, Day>(); val t = HashMap<String, List<Task>>(); val nd = HashMap<String, Int>(); val paths = ArrayList<String>(); val wn = HashMap<String, Pair<String, Workout>>()
         for ((rel, fi) in files) {
             if (isExcluded(rel)) continue
             paths.add(rel)
             if (fi.tasks.isNotEmpty()) t[rel] = fi.tasks
             if (fi.dayKey != null && fi.day != null) d[fi.dayKey] = fi.day
             fi.created?.let { nd[it] = (nd[it] ?: 0) + 1 }
+            fi.workout?.let { wn[rel] = it }
         }
-        days = d; tasks = t; noteDays = nd; mdPaths = paths; recompute()
+        workoutNotes = wn; days = d; tasks = t; noteDays = nd; mdPaths = paths; recompute()
     }
 
     /* ── XP ── */
@@ -442,19 +452,32 @@ class Engine(private val ctx: Context) {
         toast("Session complete", "$min min of stillness", "ach")
         ensureHabit(prefs.str("meditateHabit", "Meditate"))
     }
+    /** Each workout becomes its own note (Workouts/<Name>_<date>.md); the daily note links to it and the Gym habit is ticked. */
     suspend fun writeWorkout(name: String, start: Long, end: Long, ex: List<WEx>) {
         val mins = maxOf(1, ((end - start) / 60000).toInt())
-        val vol = ex.sumOf { e -> e.sets.sumOf { (it.kg.toDoubleOrNull() ?: 0.0) * (it.reps.toDoubleOrNull() ?: 0.0) } }
-        val time = Instant.ofEpochMilli(start).atZone(ZoneId.systemDefault()).toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm"))
-        val head = "**$name** · $time · $mins min" + (if (vol > 0) " · " + String.format(java.util.Locale.US, "%,d", vol.toLong()) + " kg" else "")
-        val body = ex.map { e -> "- ${e.name}: " + e.sets.joinToString(", ") { (if (it.kg.isNotBlank()) it.kg + "×" else "") + it.reps } }
-        val rel = ensureDaily()
-        modify(rel) { appendToSection(it, workoutHeading, listOf(head) + body, blankBefore = true) }
-        modify(rel) { txt -> Frontmatter.update(txt) { fm -> val prev = fm["Workout"]?.toString()?.takeIf { it.isNotBlank() }; fm["Workout"] = (if (prev != null) "$prev; " else "") + "$name $mins min" } }
-        toast("Workout saved", "Written to today's daily note", "ach")
+        val vol = ex.sumOf { e -> e.sets.sumOf { (it.kg.toDoubleOrNull() ?: 0.0) * (it.reps.toDoubleOrNull() ?: 0.0) } }.toLong()
+        val zdt = Instant.ofEpochMilli(start).atZone(ZoneId.systemDefault())
+        val date = zdt.toLocalDate().toString(); val time = zdt.toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm"))
+        val title = safeName(name).ifBlank { "Workout" }
+        val sets = ex.map { e -> "- ${e.name}: " + e.sets.joinToString(", ") { (if (it.kg.isNotBlank()) it.kg + "×" else "") + it.reps } }
+        val table = ex.flatMap { e -> listOf("", "### ${e.name}", "| Set | kg | Reps |", "| --- | --- | --- |") + e.sets.mapIndexed { i, st -> "| ${i + 1} | ${st.kg.ifBlank { "–" }} | ${st.reps} |" } }
+        val body = buildString {
+            append("---\n"); append("workout: \"${title.replace("\"", "'")}\"\n"); append("date: $date\n"); append("start: \"$time\"\n"); append("duration_min: $mins\n"); append("volume_kg: $vol\n")
+            append("exercises:\n"); ex.forEach { append("  - \"${it.name.replace("\"", "'")}\"\n") }; append("tags:\n  - workout\n---\n")
+            append("# $title\n"); append(LocalDate.parse(date).format(DateTimeFormatter.ofPattern("EEEE d MMMM yyyy"))).append(" · $time · $mins min")
+            if (vol > 0) append(" · " + String.format(java.util.Locale.US, "%,d", vol) + " kg"); append("\n\nDaily note: ${dailyLink(date)}\n\n## Sets\n")
+            sets.forEach { append(it).append("\n") }
+            append("\n## Detail"); table.forEach { append("\n").append(it) }; append("\n")
+        }
+        val rel = create(workoutsFolder.trim('/') + "/" + title + "_" + date + ".md", body)
+        val daily = ensureDaily()
+        modify(daily) { appendToSection(it, workoutHeading, listOf("- [[" + rel.removeSuffix(".md") + "|" + title + "]] · $mins min")) }
+        modify(daily) { txt -> Frontmatter.update(txt) { fm -> val prev = fm["Workout"]?.toString()?.takeIf { it.isNotBlank() }; fm["Workout"] = (if (prev != null) "$prev; " else "") + "$title $mins min" } }
+        toast("Workout saved", rel.substringAfterLast('/').removeSuffix(".md"), "ach")
         ensureHabit(prefs.str("gymHabit", "Gym"))
     }
-    fun workoutsDesc(): List<Pair<String, Workout>> = days.keys.sortedDescending().flatMap { k -> days[k]!!.workouts.reversed().map { k to it } }
+    fun workoutsDesc(): List<Pair<String, Workout>> =
+        (workoutNotes.values.toList() + days.flatMap { (k, d) -> d.workouts.map { k to it } }).sortedByDescending { it.first }
 
     /* ── vault listings for the UI ── */
     fun projects(): List<Pair<String, Double?>> {

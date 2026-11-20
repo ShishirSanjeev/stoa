@@ -109,6 +109,7 @@ fun HomePage(nest: NestedScrollConnection, openDrawer: () -> Unit) {
         for (w in ui.layout.on(ui.layout.home)) when (w) {
             "level" -> StoaCard(flat = true) { LevelBlock(E.rpg) }
             "quick" -> QuickRow()
+            "pins" -> PinnedCard()
             "three" -> ThreeCard()
             "screen" -> ScreenTimeCard()
             "due" -> DueCard()

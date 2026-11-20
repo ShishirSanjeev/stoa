@@ -158,24 +158,17 @@ fun ActiveWorkout(a: Active, set: (Active?) -> Unit, custom: List<Pair<String, S
     val E = LocalEngine.current; val p = LocalUi.current.prefs; val ink = LocalInk.current
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) { while (true) { now = System.currentTimeMillis(); delay(500) } }
-    var restLen by remember { mutableIntStateOf(p.int("rest_len", 90)) }
     var picking by remember { mutableStateOf(false) }
     var confirm by remember { mutableStateOf(false) }
-    val restEnd = p.long("rest_end")
     fun upd(i: Int, e: AEx) = set(a.copy(ex = a.ex.toMutableList().also { it[i] = e }))
     StoaCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                BasicTextField(a.name, { set(a.copy(name = it)) }, textStyle = TextStyle(color = ink.mute, fontSize = 11.sp, letterSpacing = 1.6.sp), cursorBrush = SolidColor(ink.ink), singleLine = true)
+                BasicTextField(a.name, { set(a.copy(name = it)) }, textStyle = TextStyle(color = ink.mute, fontSize = 11.sp, letterSpacing = 1.6.sp, fontFamily = Mono), cursorBrush = SolidColor(ink.ink), singleLine = true)
                 Text(fmtMs(now - a.start), fontFamily = Display, fontWeight = FontWeight.Light, fontSize = 34.sp, color = ink.ink)
             }
-            if (restEnd > now) {
-                Column(horizontalAlignment = Alignment.End) { Kicker("Rest"); Text(fmtMs(restEnd - now), fontFamily = Display, fontWeight = FontWeight.Light, fontSize = 34.sp, color = ink.ink) }
-                IconBtn(Icons.Outlined.Close, "Stop rest", { p.put("rest_end", 0L); now = System.currentTimeMillis() }, size = 18.dp)
-            } else Chips(listOf(60, 90, 120, 180), restLen, { "${it}s" }) { restLen = it; p.put("rest_len", it) }
         }
     }
-    Muted("Tick a set to start the rest timer.", Modifier.padding(horizontal = 4.dp), 12)
     a.ex.forEachIndexed { i, e ->
         StoaCard(modifier = Modifier.animateContentSize()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -197,7 +190,6 @@ fun ActiveWorkout(a: Active, set: (Active?) -> Unit, custom: List<Pair<String, S
                         val bg by animateColorAsState(if (s.done) ink.ink else Color.Transparent, label = "set")
                         Box(Modifier.size(28.dp).clip(RoundedCornerShape(9.dp)).background(bg).border(1.5.dp, if (s.done) ink.ink else ink.faint, RoundedCornerShape(9.dp)).clickable {
                             val d = !s.done; upd(i, e.copy(sets = e.sets.toMutableList().also { l -> l[si] = s.copy(done = d) }))
-                            if (d) { p.put("rest_end", System.currentTimeMillis() + restLen * 1000L); now = System.currentTimeMillis() }
                         }, contentAlignment = Alignment.Center) { if (s.done) Icon(Icons.Outlined.Check, null, Modifier.size(16.dp), tint = ink.inv) }
                     }
                 }

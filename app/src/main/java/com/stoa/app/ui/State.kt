@@ -17,7 +17,7 @@ val SECTIONS = linkedMapOf(
     "ideas" to "Ideas", "canvas" to "Canvas", "shots" to "Screenshots"
 )
 val SECTION_TAB = mapOf("reading" to "today", "still" to "today", "writing" to "notes", "tasks" to "notes", "ideas" to "notes", "canvas" to "notes", "shots" to "notes")
-val HOME_WIDGETS = linkedMapOf("level" to "Level & XP", "quick" to "Quick shortcuts", "three" to "Today's three", "screen" to "Screen time", "due" to "Due soon", "seren" to "Serendipity", "capture" to "Capture an idea")
+val HOME_WIDGETS = linkedMapOf("level" to "Level & XP", "quick" to "Quick shortcuts", "pins" to "Pinned apps & folders", "three" to "Today's three", "screen" to "Screen time", "due" to "Due soon", "seren" to "Serendipity", "capture" to "Capture an idea")
 val QUICK = linkedMapOf("idea" to "Idea", "task" to "Task", "daily" to "Daily note", "read" to "Read", "still" to "Breathe", "gym" to "Lift", "canvas" to "Canvas", "shots" to "Shots", "search" to "Search", "sync" to "Sync")
 val TODAY_SECTIONS = linkedMapOf("three" to "Today's three", "routines" to "Routines", "habits" to "Habits", "projects" to "Projects")
 
@@ -46,7 +46,9 @@ data class Layout(
             fun list(k: String, def: List<Pair<String, Boolean>>): List<Pair<String, Boolean>> {
                 val a = j.optJSONArray(k) ?: return def
                 val got = (0 until a.length()).mapNotNull { i -> a.optJSONArray(i)?.let { it.optString(0) to it.optBoolean(1, true) } }.filter { g -> def.any { it.first == g.first } }
-                return got + def.filter { d -> got.none { it.first == d.first } }
+                val out = got.toMutableList()
+                def.forEachIndexed { i, d -> if (out.none { it.first == d.first }) out.add(minOf(i, out.size), d) }   // new widgets appear where they belong
+                return out
             }
             val dock = j.optJSONArray("dock")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: DEFAULT.dock
             return Layout(list("tabs", DEFAULT.tabs), list("home", DEFAULT.home), list("today", DEFAULT.today), list("todaySections", DEFAULT.todaySections), list("notes", DEFAULT.notes), dock, list("quick", DEFAULT.quick))
@@ -66,6 +68,14 @@ class UiState(val prefs: Prefs) {
     var homeTick by mutableIntStateOf(0)
     var shots by mutableStateOf<List<android.net.Uri>>(emptyList())
     var reader by mutableStateOf<String?>(null)
+    var folder by mutableStateOf<String?>(null)
+    var pins by mutableStateOf(prefs.jsonArr("pins")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList())
+    fun savePins(l: List<String>) { pins = l; prefs.put("pins", JSONArray(l).toString()) }
+    fun togglePin(k: String) = savePins(if (pins.contains(k)) pins - k else pins + k)
+    var wpOn by mutableStateOf(prefs.bool("wp_on", false))
+    var wpBlur by mutableStateOf(prefs.int("wp_blur", 24))
+    var wpDim by mutableStateOf(prefs.int("wp_dim", 55))
+    fun setWallpaper(on: Boolean = wpOn, blur: Int = wpBlur, dim: Int = wpDim) { wpOn = on; wpBlur = blur; wpDim = dim; prefs.put("wp_on", on); prefs.put("wp_blur", blur); prefs.put("wp_dim", dim) }
     var capture by mutableStateOf<String?>(null)
     var layout by mutableStateOf(Layout.load(prefs))
     var resume by mutableIntStateOf(0)

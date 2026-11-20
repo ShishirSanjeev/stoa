@@ -90,13 +90,14 @@ fun SettingsScreen() {
                 if (E.error != null) Muted(E.error ?: "", Modifier.padding(top = 8.dp), 13)
                 else if (E.ready) Muted("Reading ${E.mdPaths.size} notes from ${E.vaultName}.", Modifier.padding(top = 8.dp), 12)
             }
+            WallpaperSettings()
             LayoutEditor()
             MindfulEditor()
             StoaCard("Notes & folders") {
                 Muted("Paths are relative to the vault.", size = 12)
                 listOf("bookNote" to ("Book note" to E.bookNote), "writingFolder" to ("Writing folder" to E.writingFolder), "writingPrefix" to ("Writing prefix" to E.writingPrefix),
                     "captureFolder" to ("Quick capture folder" to E.capture), "clippingsFolder" to ("Web clippings folder" to E.clippings), "inboxPath" to ("Inbox note (/task)" to E.inbox),
-                    "canvasFolder" to ("Canvas folder" to E.canvasFolder), "attachmentsFolder" to ("Attachments folder" to E.attachments), "dashboardState" to ("Dashboard state note" to E.dashState),
+                    "canvasFolder" to ("Canvas folder" to E.canvasFolder), "attachmentsFolder" to ("Attachments folder" to E.attachments), "workoutsFolder" to ("Workouts folder" to E.workoutsFolder), "dashboardState" to ("Dashboard state note" to E.dashState),
                     "habitHeading" to ("Habits heading" to E.habitHeading), "priorityHeading" to ("Today's three heading" to E.priorityHeading), "workoutHeading" to ("Workout heading" to E.workoutHeading),
                     "gymHabit" to ("Habit ticked after a workout" to p.str("gymHabit", "Gym")), "readingHabit" to ("…after reading" to p.str("readingHabit", "Reading")),
                     "meditateHabit" to ("…after stillness" to p.str("meditateHabit", "Meditate")), "writingHabit" to ("…after uploading writing" to p.str("writingHabit", "Writing"))
@@ -171,6 +172,25 @@ private fun LayoutGroup(title: String, list: List<Pair<String, Boolean>>, labels
             Text(labels[k] ?: k, Modifier.weight(1f), color = LocalInk.current.ink)
             if (i > 0) IconBtn(Icons.Outlined.ArrowUpward, "Move up", { val m = list.toMutableList(); val x = m.removeAt(i); m.add(i - 1, x); save(m) }, size = 17.dp)
             Toggle(on) { v -> if (title == "Tabs" && !v && list.count { it.second } <= 1) return@Toggle; save(list.toMutableList().also { it[i] = k to v }) }
+        }
+    }
+}
+
+@Composable
+fun WallpaperSettings() {
+    val ui = LocalUi.current; val ink = LocalInk.current
+    val colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = ink.ink, activeTrackColor = ink.ink, inactiveTrackColor = ink.line2, activeTickColor = Color.Transparent, inactiveTickColor = Color.Transparent)
+    StoaCard("Wallpaper") {
+        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) { Text("Show my wallpaper", color = ink.ink); Muted("Your home-screen wallpaper, softened behind Stoa.", size = 12) }
+            Toggle(ui.wpOn) { ui.setWallpaper(on = it) }
+        }
+        if (ui.wpOn) {
+            Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) { Kicker("Blur", Modifier.weight(1f)); Kicker("${ui.wpBlur}") }
+            androidx.compose.material3.Slider(ui.wpBlur.toFloat(), { ui.setWallpaper(blur = it.toInt()) }, valueRange = 0f..60f, colors = colors)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Kicker("Dim", Modifier.weight(1f)); Kicker("${ui.wpDim}%") }
+            androidx.compose.material3.Slider(ui.wpDim.toFloat(), { ui.setWallpaper(dim = it.toInt()) }, valueRange = 0f..95f, colors = colors)
+            Muted("Blur needs Android 12 or newer. If the wallpaper doesn't show, make sure All-files access is on.", size = 11)
         }
     }
 }

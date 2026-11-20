@@ -84,6 +84,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.blur
+import androidx.core.graphics.drawable.toBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
@@ -130,6 +133,7 @@ fun Root() {
     val ui = LocalUi.current; val ink = LocalInk.current; val E = LocalEngine.current
     val scope = rememberCoroutineScope()
     BoxWithConstraints(Modifier.fillMaxSize().background(ink.bg)) {
+        if (ui.wpOn) WallpaperLayer()
         val H = constraints.maxHeight.toFloat().coerceAtLeast(1f)
         // drawer position as a fraction (0 = open, 1 = closed) so the keyboard resizing the screen never moves it
         var frac by remember { mutableFloatStateOf(1f) }
@@ -144,6 +148,7 @@ fun Root() {
         LaunchedEffect(ui.homeTick) { if (ui.homeTick > 0) settle(1f) }
         BackHandler(true) {
             when {
+                ui.folder != null -> ui.folder = null
                 ui.reader != null -> ui.reader = null
                 ui.canvas != null -> ui.canvas = null
                 ui.viewer != null -> ui.viewer = null
@@ -205,6 +210,7 @@ fun Root() {
         if (frac < 1f) Box(Modifier.fillMaxSize().offset { IntOffset(0, (frac * H).roundToInt()) }.clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)).background(Color.Black)) {
             Drawer(drawerNest, frac < .5f) { settle(1f) }
         }
+        ui.folder?.let { FolderBrowser(it) }
         ui.reader?.let { ClipReader(it) }
         ui.capture?.let { CaptureSheet(it) }
         ui.canvas?.let { CanvasEditor(it) }
@@ -228,7 +234,7 @@ fun Root() {
 fun BottomNav(tabs: List<String>) {
     val ui = LocalUi.current; val ink = LocalInk.current
     val icons = mapOf("home" to Icons.Outlined.Home, "today" to Icons.Outlined.WbSunny, "notes" to Icons.Outlined.EditNote, "gym" to Icons.Outlined.FitnessCenter)
-    Column(Modifier.fillMaxWidth().background(ink.bg)) {
+    Column(Modifier.fillMaxWidth().background(if (ui.wpOn) Color.Transparent else ink.bg)) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(ink.line))
         BoxWithConstraints(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 18.dp, vertical = 4.dp)) {
             val w = maxWidth / tabs.size
@@ -387,6 +393,8 @@ fun DrawerRow(e: Entry, modifier: Modifier, first: Boolean = false, onLong: () -
 fun AppMenu(e: Entry, dismiss: () -> Unit) {
     val ui = LocalUi.current; val ctx = LocalContext.current
     Sheet(e.label, dismiss) {
+        val pinned = ui.pins.contains(e.key)
+        MenuItem(if (pinned) "Unpin from Home" else "Pin to Home") { ui.togglePin(e.key); dismiss() }
         val inDock = ui.layout.dock.contains(e.key)
         MenuItem(if (inDock) "Remove from dock" else "Add to dock") {
             val d = if (inDock) ui.layout.dock - e.key else (ui.layout.dock + e.key).takeLast(4)
@@ -411,4 +419,27 @@ fun MenuItem(text: String, onClick: () -> Unit) {
 fun AnimatedIn(content: @Composable () -> Unit) {
     val s = remember { androidx.compose.animation.core.MutableTransitionState(false).apply { targetState = true } }
     AnimatedVisibility(s, enter = fadeIn(tween(260)) + slideInVertically(tween(320)) { it / 14 }, exit = fadeOut() + slideOutVertically()) { content() }
+}
+
+/** Your home-screen wallpaper behind everything, blurred and dimmed to taste (Settings → Wallpaper). */
+@Composable
+fun WallpaperLayer() {
+    val ui = LocalUi.current; val ctx = LocalContext.current; val ink = LocalInk.current
+    val bmp by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, ui.resume) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                android.app.WallpaperManager.getInstance(ctx).drawable?.let { d ->
+                    val iw = d.intrinsicWidth.takeIf { it > 0 } ?: 1080; val ih = d.intrinsicHeight.takeIf { it > 0 } ?: 2400
+                    val w = minOf(iw, 1080)
+                    d.toBitmap(w, (w.toLong() * ih / iw).toInt().coerceAtLeast(1)).asImageBitmap()
+                }
+            } catch (e: Exception) { null }
+        }
+    }
+    val blur by animateDpAsState(ui.wpBlur.dp, label = "blur")
+    val dim by animateFloatAsState(ui.wpDim / 100f, label = "dim")
+    Box(Modifier.fillMaxSize()) {
+        bmp?.let { Image(it, null, Modifier.fillMaxSize().blur(blur, androidx.compose.ui.draw.BlurredEdgeTreatment.Rectangle), contentScale = androidx.compose.ui.layout.ContentScale.Crop) }
+        Box(Modifier.fillMaxSize().background(ink.bg.copy(alpha = if (bmp == null) 1f else dim)))
+    }
 }

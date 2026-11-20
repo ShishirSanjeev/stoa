@@ -145,7 +145,7 @@ fun scanWorkouts(text: String, heading: String): List<Workout> {
     for (i in sec.first + 1..sec.last) {
         val l = lines[i].trim()
         bold.find(l)?.let { flush(); name = it.groupValues[1].trim(); meta = it.groupValues[2].trim().removePrefix("·").trim(); return@let }
-        if (bold.containsMatchIn(l)) continue
+        if (bold.containsMatchIn(l) || l.contains("[[")) continue
         val e = exRe.find(l) ?: continue
         if (name == null) { name = "Workout"; meta = "" }
         val sets = e.groupValues[2].split(",").mapNotNull { s ->
