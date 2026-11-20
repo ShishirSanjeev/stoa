@@ -37,6 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.drop
 
 /** A page whose sections sit side by side; swipe on the top half of the screen (or tap the tabs) to move between them. */
 @Composable
@@ -45,8 +46,10 @@ fun SubPaged(title: String, kicker: String?, key: String, subs: List<Pair<String
     val start = subs.indexOfFirst { it.first == current }.coerceAtLeast(0)
     val pager = rememberPagerState(initialPage = start) { subs.size }
     DisposableEffect(pager, key) { ui.subPagers[key] = pager; onDispose { if (ui.subPagers[key] === pager) ui.subPagers.remove(key) } }
-    LaunchedEffect(pager, subs) { snapshotFlow { pager.settledPage }.collect { i -> subs.getOrNull(i)?.first?.let { if (it != current) onCurrent(it) } } }
-    LaunchedEffect(current) { val i = subs.indexOfFirst { it.first == current }; if (i >= 0 && i != pager.currentPage && !pager.isScrollInProgress) pager.animateScrollToPage(i) }
+    // only a swipe that settles on a new sub-page updates the choice (never the initial value, which would undo a jump)
+    val subsNow by androidx.compose.runtime.rememberUpdatedState(subs); val curNow by androidx.compose.runtime.rememberUpdatedState(current); val onCur by androidx.compose.runtime.rememberUpdatedState(onCurrent)
+    LaunchedEffect(pager) { snapshotFlow { pager.settledPage }.drop(1).collect { i -> subsNow.getOrNull(i)?.first?.let { if (it != curNow) onCur(it) } } }
+    LaunchedEffect(current) { val i = subs.indexOfFirst { it.first == current }; if (i >= 0 && i != pager.currentPage) pager.scrollToPage(i) }
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         if (subs.size > 1) Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) { SegPager(subs, pager) { i -> scope.launch { pager.animateScrollToPage(i) } } }

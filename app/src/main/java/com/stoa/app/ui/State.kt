@@ -140,6 +140,7 @@ class UiState(val prefs: Prefs) {
     fun saveLayout(l: Layout) { layout = l; prefs.put("layout", l.toJson()) }
     fun updateHidden(s: Set<String>) { hidden = s; prefs.hidden = s }
     fun updateMindful(s: Set<String>) { mindful = s; prefs.mindful = s }
+    fun goSub(page: String, sub: String) { if (page == "today") todaySub = sub else if (page == "notes") notesSub = sub; tab = page }
     fun go(key: String) {
         val t = SECTION_TAB[key]
         if (t == null) { tab = key; return }

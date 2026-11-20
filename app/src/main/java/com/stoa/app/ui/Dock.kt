@@ -1,5 +1,6 @@
 package com.stoa.app.ui
 
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.animation.AnimatedContent
@@ -162,8 +163,7 @@ fun Dock(modifier: Modifier = Modifier) {
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { ui.setCollapsed(true) }, contentAlignment = Alignment.Center) {
                     Box(Modifier.width(30.dp).height(3.dp).clip(RoundedCornerShape(2.dp)).background(ink.faint))
                 }
-                val shorts = shortcuts(ui).filter { it.second }.map { it.first }
-                Box(Modifier.fillMaxWidth().height(iconSize + 26.dp + if (shorts.isNotEmpty()) 24.dp else 0.dp)) {
+                Box(Modifier.fillMaxWidth().height(iconSize + 26.dp + 40.dp)) {
                     Glass(RoundedCornerShape(28.dp), Modifier.matchParentSize())
                     Column(Modifier.fillMaxSize()) {
                     Row(Modifier.fillMaxWidth().height(iconSize + 26.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -214,11 +214,7 @@ fun Dock(modifier: Modifier = Modifier) {
                             }
                         }
                     }
-                    if (shorts.isNotEmpty()) Row(Modifier.fillMaxWidth().height(22.dp).padding(horizontal = 14.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
-                        shorts.forEach { e ->
-                            Text(e.label.uppercase(), Modifier.combinedClickable(onClick = { openEntryKey(ctx, ui, e.key) }, onLongClick = { ui.editShortcuts = true }), fontFamily = Mono, fontSize = 9.sp, letterSpacing = 1.3.sp, color = ink.mute, maxLines = 1)
-                        }
-                    }
+                    PageStrip()
                     }
                 }
             }
@@ -332,3 +328,46 @@ fun FolderOverlay() {
     }
 }
 
+
+/** Quick navigation under the dock: Today · Notes · Almanac; tap one to see its sub-pages, swipe to come back. */
+@Composable
+fun PageStrip() {
+    val ui = LocalUi.current; val ink = LocalInk.current; val haptic = LocalHapticFeedback.current
+    var open by remember { mutableStateOf<String?>(null) }
+    val pages = ui.layout.on(ui.layout.tabs).filter { it != "home" }
+    fun subsOf(p: String): List<Pair<String, String>> = when (p) {
+        "today" -> ui.layout.on(ui.layout.today).ifEmpty { listOf("today") }.map { it to (if (it == "today") "Today" else SECTIONS[it] ?: it) }
+        "notes" -> ui.layout.on(ui.layout.notes).map { it to (SECTIONS[it] ?: it) }
+        else -> emptyList()
+    }
+    var drag by remember { mutableFloatStateOf(0f) }
+    Box(Modifier.fillMaxWidth().height(40.dp).padding(horizontal = 10.dp, vertical = 3.dp)
+        .pointerInput(Unit) { detectHorizontalDragGestures(onDragStart = { drag = 0f }, onDragEnd = { if (abs(drag) > 30f) open = null; drag = 0f }) { ch, d -> ch.consume(); drag += d } }) {
+        AnimatedContent(open, label = "strip", transitionSpec = {
+            val inward = targetState != null
+            (fadeIn(tween(180)) + androidx.compose.animation.slideInHorizontally(tween(220)) { if (inward) it / 4 else -it / 4 }) togetherWith
+                (fadeOut(tween(120)) + androidx.compose.animation.slideOutHorizontally(tween(220)) { if (inward) -it / 4 else it / 4 })
+        }) { cur ->
+            val items: List<Pair<String, String>> = if (cur == null) pages.map { it to (SECTIONS[it] ?: it) } else listOf("‹" to "‹") + subsOf(cur)
+            Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                items.forEachIndexed { i, (k, label) ->
+                    if (i > 0) Box(Modifier.width(1.dp).height(14.dp).background(ink.line2))
+                    val back = k == "‹"
+                    Box(Modifier.then(if (back) Modifier.width(34.dp) else Modifier.weight(1f)).fillMaxSize().clip(RoundedCornerShape(10.dp))
+                        .clickable {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            when {
+                                back -> open = null
+                                cur == null && subsOf(k).size > 1 -> open = k
+                                cur == null -> ui.goSub(k, if (k == "today") "today" else ui.notesSub)
+                                else -> { ui.goSub(cur, k); open = null }
+                            }
+                        }, contentAlignment = Alignment.Center) {
+                        Text(if (back) "‹" else label.uppercase(), fontFamily = Mono, fontSize = if (back) 18.sp else if (cur == null) 13.sp else 11.5.sp,
+                            letterSpacing = if (cur == null) 2.sp else 1.2.sp, color = if (cur == null) ink.ink else ink.ink.copy(alpha = .85f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+        }
+    }
+}
