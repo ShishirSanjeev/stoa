@@ -29,11 +29,17 @@ object Apps {
         return pm.queryIntentActivities(i, 0).map { LApp(it.activityInfo.packageName, it.activityInfo.name, it.loadLabel(pm).toString()) }
             .filter { it.pkg != ctx.packageName }.distinctBy { it.pkg + "/" + it.cls }.sortedBy { it.label.lowercase() }
     }
-    fun icon(ctx: Context, a: LApp): ImageBitmap? = synchronized(icons) {
-        icons[a.pkg + a.cls] ?: try {
-            ctx.packageManager.getActivityIcon(ComponentName(a.pkg, a.cls)).toBitmap(112, 112).asImageBitmap().also { icons[a.pkg + a.cls] = it }
-        } catch (e: Exception) { null }
+    fun icon(ctx: Context, a: LApp): ImageBitmap? {
+        val pack = Prefs(ctx).str("icon_pack", "")
+        val k = pack + "|" + a.pkg + "/" + a.cls
+        synchronized(icons) { icons[k]?.let { return it } }
+        val d = (if (pack.isNotEmpty()) IconPacks.drawable(ctx, pack, a.pkg, a.cls) else null)
+            ?: try { ctx.packageManager.getActivityIcon(ComponentName(a.pkg, a.cls)) } catch (e: Exception) { null } ?: return null
+        val b = try { d.toBitmap(144, 144).asImageBitmap() } catch (e: Exception) { return null }
+        synchronized(icons) { icons[k] = b }
+        return b
     }
+    fun clearIcons() = synchronized(icons) { icons.clear() }
     fun launch(ctx: Context, a: LApp) {
         try {
             ctx.startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setComponent(ComponentName(a.pkg, a.cls))
@@ -126,3 +132,49 @@ object Apps {
     }
     fun labelOf(ctx: Context, pkg: String): String = try { val pm = ctx.packageManager; pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() } catch (e: Exception) { pkg.substringAfterLast('.') }
 }
+
+/** ADW / Nova-style icon packs: read the pack's appfilter.xml and pull its drawables. */
+object IconPacks {
+    data class Pack(val pkg: String, val label: String)
+    private var loaded = ""; private val map = HashMap<String, String>()
+    fun installed(ctx: Context): List<Pack> {
+        val pm = ctx.packageManager
+        return listOf("org.adw.launcher.THEMES", "com.novalauncher.THEME", "com.gau.go.launcherex.theme", "com.teslacoilsw.launcher.THEME")
+            .flatMap { pm.queryIntentActivities(Intent(it), 0) }.map { it.activityInfo.packageName }.distinct()
+            .map { Pack(it, try { pm.getApplicationLabel(pm.getApplicationInfo(it, 0)).toString() } catch (e: Exception) { it }) }.sortedBy { it.label.lowercase() }
+    }
+    @Synchronized private fun load(ctx: Context, pack: String) {
+        if (loaded == pack) return
+        map.clear(); loaded = pack
+        try {
+            val res = ctx.packageManager.getResourcesForApplication(pack)
+            val id = res.getIdentifier("appfilter", "xml", pack)
+            val parser: org.xmlpull.v1.XmlPullParser = if (id != 0) res.getXml(id) else
+                org.xmlpull.v1.XmlPullParserFactory.newInstance().newPullParser().also { it.setInput(res.assets.open("appfilter.xml"), "utf-8") }
+            var ev = parser.eventType
+            while (ev != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
+                if (ev == org.xmlpull.v1.XmlPullParser.START_TAG && parser.name == "item") {
+                    val comp = parser.getAttributeValue(null, "component") ?: ""; val dr = parser.getAttributeValue(null, "drawable")
+                    val m = Regex("ComponentInfo\\{([^/]+)/([^}]+)\\}").find(comp)
+                    if (m != null && dr != null) {
+                        val pkg = m.groupValues[1]; var cls = m.groupValues[2]; if (cls.startsWith(".")) cls = pkg + cls
+                        map["$pkg/$cls"] = dr; map.putIfAbsent("$pkg/*", dr)
+                    }
+                }
+                ev = parser.next()
+            }
+        } catch (e: Exception) { }
+    }
+    fun drawable(ctx: Context, pack: String, pkg: String, cls: String): android.graphics.drawable.Drawable? {
+        load(ctx, pack)
+        val name = map["$pkg/$cls"] ?: map["$pkg/*"] ?: return null
+        return try {
+            val res = ctx.packageManager.getResourcesForApplication(pack)
+            val id = res.getIdentifier(name, "drawable", pack).takeIf { it != 0 } ?: res.getIdentifier(name, "mipmap", pack)
+            if (id == 0) null else androidx.core.content.res.ResourcesCompat.getDrawable(res, id, null)
+        } catch (e: Exception) { null }
+    }
+}
+
+/** Needed only so Android lets Stoa read what Spotify is playing (Notification access). */
+class MediaListener : android.service.notification.NotificationListenerService()

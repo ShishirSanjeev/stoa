@@ -196,7 +196,7 @@ fun Root() {
                     }
                 }
             }
-            AnimatedVisibility(pager.targetPage != 0, enter = fadeIn() + slideInVertically { it }, exit = fadeOut() + slideOutVertically { it }) { BottomNav(tabs) }
+            AnimatedVisibility(pager.targetPage != 0, enter = fadeIn() + slideInVertically { it }, exit = fadeOut() + slideOutVertically { it }) { BottomNav(tabs, pager) }
         }
         ui.folder?.let { FolderBrowser(it) }
         ui.reader?.let { ClipReader(it) }
@@ -240,20 +240,22 @@ fun Modifier.swipeZones(main: PagerState, half: Float, ui: UiState): Modifier = 
     }
 }
 
+/** The tab dot follows the pager directly (no waiting for the page to settle). */
 @Composable
-fun BottomNav(tabs: List<String>) {
-    val ui = LocalUi.current; val ink = LocalInk.current
+fun BottomNav(tabs: List<String>, pager: PagerState) {
+    val ink = LocalInk.current; val scope = rememberCoroutineScope()
     val icons = mapOf("home" to Icons.Outlined.Home, "today" to Icons.Outlined.WbSunny, "almanac" to Icons.Outlined.Insights, "notes" to Icons.Outlined.EditNote, "gym" to Icons.Outlined.FitnessCenter)
-    Column(Modifier.fillMaxWidth().background(if (ui.wpOn) Color.Transparent else ink.bg)) {
+    Column(Modifier.fillMaxWidth()) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(ink.line))
         BoxWithConstraints(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 18.dp, vertical = 4.dp)) {
-            val w = maxWidth / tabs.size
-            val x by animateDpAsState(w * tabs.indexOf(ui.tab).coerceAtLeast(0), spring(dampingRatio = .7f, stiffness = 420f), label = "nav")
+            val wPx = constraints.maxWidth.toFloat() / tabs.size
+            val dotPx = with(androidx.compose.ui.platform.LocalDensity.current) { 4.dp.toPx() }
             Row(Modifier.fillMaxWidth().height(54.dp)) {
-                tabs.forEach { t ->
-                    val on = t == ui.tab
-                    val c by androidx.compose.animation.animateColorAsState(if (on) ink.ink else ink.faint, label = "navc")
-                    Column(Modifier.weight(1f).fillMaxHeight().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { ui.tab = t },
+                tabs.forEachIndexed { i, t ->
+                    val pos = (pager.currentPage + pager.currentPageOffsetFraction - 1f)
+                    val near = (1f - kotlin.math.abs(pos - i)).coerceIn(0f, 1f)
+                    val c = androidx.compose.ui.graphics.lerp(ink.faint, ink.ink, near)
+                    Column(Modifier.weight(1f).fillMaxHeight().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { scope.launch { pager.animateScrollToPage(i + 1, animationSpec = spring(dampingRatio = .9f, stiffness = 320f)) } },
                         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                         Icon(icons[t] ?: Icons.Outlined.Home, null, Modifier.size(20.dp), tint = c)
                         Spacer(Modifier.height(4.dp))
@@ -261,7 +263,8 @@ fun BottomNav(tabs: List<String>) {
                     }
                 }
             }
-            Box(Modifier.offset(x = x + w / 2 - 2.dp, y = 50.dp).size(4.dp).clip(androidx.compose.foundation.shape.CircleShape).background(ink.ink))
+            Box(Modifier.offset { IntOffset(((pager.currentPage + pager.currentPageOffsetFraction - 1f).coerceIn(0f, tabs.size - 1f) * wPx + wPx / 2 - dotPx / 2).roundToInt(), (50 * density).roundToInt()) }
+                .size(4.dp).clip(androidx.compose.foundation.shape.CircleShape).background(ink.ink))
         }
     }
 }
@@ -384,18 +387,13 @@ fun Drawer(open: Boolean, close: () -> Unit) {
 @Composable
 fun DrawerRow(e: Entry, modifier: Modifier, first: Boolean = false, onLong: () -> Unit) {
     val ctx = LocalContext.current; val ui = LocalUi.current
-    val icon = if (e.app != null) produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, e.key) { value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { Apps.icon(ctx, e.app) } }.value else null
     val mindful = e.app != null && ui.mindful.contains(e.app.pkg)
-    Row(modifier.fillMaxWidth().combinedClickable(onClick = { openEntry(ctx, ui, e) }, onLongClick = onLong).padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(30.dp), contentAlignment = Alignment.Center) {
-            if (icon != null) Image(icon, null, Modifier.size(30.dp), colorFilter = GREY, alpha = if (mindful) .4f else .9f)
-            else Text(e.glyph, fontFamily = Mono, fontSize = 15.sp, color = Color.White)
-        }
-        Spacer(Modifier.width(18.dp))
-        Text(e.label, Modifier.weight(1f), fontFamily = Display, fontWeight = if (first) FontWeight.Normal else FontWeight.Light, fontSize = 24.sp,
-            color = if (mindful) Color(0x99FFFFFF) else Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, letterSpacing = (-0.2).sp)
+    Row(modifier.fillMaxWidth().combinedClickable(onClick = { openEntry(ctx, ui, e) }, onLongClick = onLong).padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(e.label, Modifier.weight(1f), fontFamily = Display, fontWeight = if (first) FontWeight.Normal else FontWeight.ExtraLight, fontSize = 27.sp,
+            color = if (mindful) Color(0x99FFFFFF) else Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, letterSpacing = (-0.3).sp)
         if (first) Text("↵", fontFamily = Mono, color = Color(0x80FFFFFF), fontSize = 14.sp)
         if (mindful) Text("PAUSE", fontFamily = Mono, color = Color(0x66FFFFFF), fontSize = 9.sp, letterSpacing = 1.2.sp)
+        if (e.app == null) Text("STOA", fontFamily = Mono, color = Color(0x55FFFFFF), fontSize = 9.sp, letterSpacing = 1.2.sp)
     }
 }
 
@@ -403,8 +401,9 @@ fun DrawerRow(e: Entry, modifier: Modifier, first: Boolean = false, onLong: () -
 fun AppMenu(e: Entry, dismiss: () -> Unit) {
     val ui = LocalUi.current; val ctx = LocalContext.current
     Sheet(e.label, dismiss) {
-        val pinned = ui.pins.contains(e.key)
-        MenuItem(if (pinned) "Unpin from Home" else "Pin to Home") { ui.togglePin(e.key); dismiss() }
+        val docked = ui.dockHas(e.key)
+        MenuItem(if (docked) "Remove from dock" else "Add to dock") { if (docked) ui.dockRemove(e.key) else ui.dockAdd(e.key); dismiss() }
+        ui.dock.filter { it.isFolder }.forEach { f -> if (!f.apps.contains(e.key)) MenuItem("Add to folder “${f.name}”") { ui.dockAddToFolder(f.id, e.key); dismiss() } }
         e.app?.let { a ->
             val m = ui.mindful.contains(a.pkg)
             MenuItem(if (m) "Stop pausing before ${a.label}" else "Pause & breathe before ${a.label}") { ui.updateMindful(if (m) ui.mindful - a.pkg else ui.mindful + a.pkg); dismiss() }
@@ -441,6 +440,7 @@ fun WallpaperLayer() {
             } catch (e: Exception) { null }
         }
     }
+    LaunchedEffect(bmp) { ui.wpBmp = bmp }
     val blur by animateDpAsState(ui.wpBlur.dp, label = "blur")
     val dim by animateFloatAsState(ui.wpDim / 100f, label = "dim")
     Box(Modifier.fillMaxSize()) {

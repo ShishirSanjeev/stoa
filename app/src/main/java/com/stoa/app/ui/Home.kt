@@ -100,6 +100,7 @@ fun HomePage(nest: NestedScrollConnection) {
     val E = LocalEngine.current; val ui = LocalUi.current; val ink = LocalInk.current
     var time by remember { mutableStateOf(LocalTime.now()) }
     LaunchedEffect(Unit) { while (true) { time = LocalTime.now(); delay(1000L * (60 - time.second).coerceAtLeast(1)) } }
+    Box(Modifier.fillMaxSize()) {
     Page(nest) {
         // greeting · home name ............ date
         Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -111,6 +112,7 @@ fun HomePage(nest: NestedScrollConnection) {
         }
         Text(time.format(DateTimeFormatter.ofPattern("HH:mm")), fontFamily = Display, fontWeight = FontWeight.ExtraLight, fontSize = 94.sp, lineHeight = 94.sp, letterSpacing = (-3).sp, color = ink.ink)
         SyncLine()
+        NowPlaying()
         Spacer(Modifier.height(6.dp))
         E.error?.let { err -> StoaCard("Set up") { Muted(err, size = 14); Spacer(Modifier.height(10.dp)); Pill("Open settings", { ui.settings = true }, primary = true) } }
         for (w in ui.layout.on(ui.layout.home)) when (w) {
@@ -119,10 +121,13 @@ fun HomePage(nest: NestedScrollConnection) {
             "three" -> ThreeCard()
             "search" -> SearchCard()
             "capture" -> CaptureCard()
-            "pins" -> PinnedCard()
             "seren" -> SerenCard()
             "due" -> DueCard()
         }
+        Spacer(Modifier.height(if (ui.dockCollapsed) 60.dp else 120.dp))
+    }
+    Dock(Modifier.align(Alignment.BottomCenter).padding(bottom = 4.dp))
+    FolderOverlay()
     }
 }
 

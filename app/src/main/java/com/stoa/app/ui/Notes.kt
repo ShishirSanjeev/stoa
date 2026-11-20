@@ -95,7 +95,7 @@ fun NotesPage() {
             "shots" -> Shots()
             "gym" -> GymView()
             "writing" -> Writing()
-            else -> BookTasks()
+            else -> TasksPipeline()
         }
     }
 }

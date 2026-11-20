@@ -99,6 +99,7 @@ fun SettingsScreen() {
             }
             HomeSettings()
             WallpaperSettings()
+            DockSettings()
             LayoutEditor()
             MindfulEditor()
             StoaCard("Notes & folders") {
@@ -215,5 +216,26 @@ fun HomeSettings() {
             Kicker(lv.first, Modifier.padding(top = 12.dp, bottom = 2.dp))
             Field(v, { v = it; p.put(k, it) }, lv.second)
         }
+    }
+}
+
+@Composable
+fun DockSettings() {
+    val ui = LocalUi.current; val ctx = LocalContext.current; val ink = LocalInk.current
+    val packs = androidx.compose.runtime.remember { com.stoa.app.IconPacks.installed(ctx) }
+    fun setPack(p: String) { ui.iconPack = p; ui.prefs.put("icon_pack", p); Apps.clearIcons() }
+    StoaCard("Dock & icons") {
+        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) { Text("Monochrome icons", color = ink.ink); Muted("Keeps the dock black and white.", size = 12) }
+            Toggle(ui.greyIcons) { ui.greyIcons = it; ui.prefs.put("grey_icons", it) }
+        }
+        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) { Text("Collapse the dock", color = ink.ink); Muted("Or swipe down on its handle.", size = 12) }
+            Toggle(ui.dockCollapsed) { ui.setCollapsed(it) }
+        }
+        Kicker("Icon pack", Modifier.padding(top = 10.dp, bottom = 4.dp))
+        if (packs.isEmpty()) Muted("No icon packs installed. Any pack that supports Nova or ADW (most on the Play Store) will show up here.", size = 12)
+        Chips(listOf("") + packs.map { it.pkg }, ui.iconPack, { k -> if (k.isEmpty()) "System" else packs.firstOrNull { it.pkg == k }?.label ?: k }) { setPack(it) }
+        Muted("Long-press an app in the drawer → Add to dock. In the dock, long-press and drag to re-order; drop onto another icon to make a folder.", Modifier.padding(top = 8.dp), 11)
     }
 }

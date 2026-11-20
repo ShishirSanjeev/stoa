@@ -457,6 +457,33 @@ class Engine(private val ctx: Context) {
         toast("$min min read", bookRel.substringAfterLast('/').removeSuffix(".md"), "ach")
         ensureHabit(prefs.str("readingHabit", "Reading"))
     }
+    /** Copies photos into the attachments folder and appends “p. N · [[daily]] — thought” plus embeds to the book note. */
+    suspend fun addReadingNote(ctx: android.content.Context, bookRel: String, page: String, text: String, imgs: List<android.net.Uri>) {
+        val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
+        val bn = safeName(bookTitle(bookRel)).replace(' ', '-')
+        val saved = withContext(Dispatchers.IO) {
+            imgs.mapIndexedNotNull { i, u ->
+                try {
+                    val ext = when (ctx.contentResolver.getType(u)) { "image/png" -> "png"; "image/webp" -> "webp"; else -> "jpg" }
+                    val rel = attachments.trim('/') + "/" + bn + "_" + stamp + (if (imgs.size > 1) "_${i + 1}" else "") + "." + ext
+                    val f = file(rel); f.parentFile?.mkdirs()
+                    ctx.contentResolver.openInputStream(u)?.use { inp -> f.outputStream().use { inp.copyTo(it) } } ?: return@mapIndexedNotNull null
+                    rel
+                } catch (e: Exception) { null }
+            }
+        }
+        val head = buildString {
+            append("- ")
+            if (page.isNotBlank()) append("**p. $page** · ")
+            append(dailyLink(today()))
+            if (text.isNotBlank()) append(" — ").append(text.lines().first())
+        }
+        val lines = listOf(head) + text.lines().drop(1).filter { it.isNotBlank() }.map { "\t$it" } + saved.map { "\t![[$it]]" }
+        if (!exists(bookRel)) { toast("Book note missing", bookRel); return }
+        modify(bookRel) { appendToSection(it, "## Reading notes", lines) }
+        toast("Added to the book", (if (page.isNotBlank()) "p. $page" else "") + if (saved.isNotEmpty()) " · ${saved.size} photo" + (if (saved.size > 1) "s" else "") else "", "ach")
+    }
+    private fun bookTitle(rel: String) = rel.substringAfterLast('/').removeSuffix(".md")
     suspend fun logStillness(min: Int) {
         putDay(today(), day().let { it.copy(medMin = it.medMin + min) }); bump()
         addToDailyProp("meditation_minutes", min)

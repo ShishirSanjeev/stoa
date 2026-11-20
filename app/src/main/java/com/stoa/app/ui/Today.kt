@@ -15,6 +15,11 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -78,7 +83,7 @@ fun TodayPage() {
         when (s) {
             "reading" -> ReadingView()
             "still" -> StillView()
-            "writing" -> Writing()
+            "writing" -> { Writing(); BookTasks() }
             else -> TodayView()
         }
     }
@@ -271,6 +276,7 @@ fun ReadingView() {
             }
         }
     }
+    if (cur != null) ReadingThoughts(cur)
     val week = (0..6).sumOf { E.days[LocalDate.now().minusDays(it.toLong()).toString()]?.readMin ?: 0 }
     StoaCard { StatRow("${E.day().readMin}" to "min today", "$week" to "min this week", "${books.size}" to "books") }
     StoaCard("Your books", action = { Pill("Add", { picking = true }, small = true, icon = Icons.Outlined.Add) }) {
@@ -333,7 +339,76 @@ fun StillView() {
             p.put("still_start", now); p.put("still_end", now + mins * 60_000L); p.put("still_min", mins); p.put("still_bell", bell); p.put("still_rung", 0); tick = now
         }, Modifier.fillMaxWidth(), primary = true)
     }
+    WakingUpCard()
     val week = (0..6).sumOf { E.days[LocalDate.now().minusDays(it.toLong()).toString()]?.medMin ?: 0 }
     val med = E.habitNamed(p.str("meditateHabit", "Meditate"))
     StoaCard { StatRow("${E.day().medMin}" to "min today", "$week" to "min this week", (med?.let { "${E.streak(it)}d" } ?: "–") to "streak") }
+}
+
+@Composable
+fun WakingUpCard() {
+    val ctx = LocalContext.current; val ink = LocalInk.current
+    val pkg = "org.wakingup.android"
+    StoaCard {
+        Row(Modifier.fillMaxWidth().clickable {
+            val i = ctx.packageManager.getLaunchIntentForPackage(pkg)
+            try {
+                if (i != null) ctx.startActivity(i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                else ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("market://details?id=$pkg")).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (e: Exception) { com.stoa.app.Apps.openUrl(ctx, "https://play.google.com/store/apps/details?id=$pkg") }
+        }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(38.dp).clip(CircleShape).border(1.dp, ink.ink, CircleShape), contentAlignment = Alignment.Center) { Box(Modifier.size(10.dp).clip(CircleShape).background(ink.ink)) }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) { Text("Waking Up", fontFamily = Display, fontSize = 19.sp, color = ink.ink); Muted("Open a guided session", size = 12) }
+            IconBtn(Icons.AutoMirrored.Outlined.OpenInNew, "Open Waking Up", { }, size = 17.dp)
+        }
+    }
+}
+
+/** Thoughts while reading: page number + text + photos → appended to the book note under “Reading notes”. */
+@Composable
+fun ReadingThoughts(book: String) {
+    val E = LocalEngine.current; val ctx = LocalContext.current; val ink = LocalInk.current; val scope = rememberCoroutineScope()
+    val p = LocalUi.current.prefs
+    var page by remember { mutableStateOf(p.str("thought_page", "")) }
+    var text by remember { mutableStateOf("") }
+    val pics = remember { androidx.compose.runtime.mutableStateListOf<android.net.Uri>() }
+    var camUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    val camera = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.TakePicture()) { ok -> if (ok) camUri?.let { pics.add(it) } }
+    val gallery = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetMultipleContents()) { l -> pics.addAll(l) }
+    StoaCard("Thoughts", action = { Muted("→ " + book.substringAfterLast('/').removeSuffix(".md"), size = 12) }) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Kicker("Page", Modifier.padding(end = 10.dp))
+            Field(page, { v -> page = v.filter { it.isDigit() }.take(5); p.put("thought_page", page) }, "—", Modifier.width(90.dp))
+        }
+        Field(text, { text = it }, "What struck you?", singleLine = false, modifier = Modifier.padding(top = 8.dp).heightIn(min = 90.dp))
+        if (pics.isNotEmpty()) Row(Modifier.padding(top = 10.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            pics.toList().forEach { u ->
+                Box {
+                    coil.compose.AsyncImage(u, null, Modifier.size(72.dp).clip(RoundedCornerShape(8.dp)), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+                    Box(Modifier.align(Alignment.TopEnd).padding(3.dp).size(20.dp).clip(CircleShape).background(ink.ink).clickable { pics.remove(u) }, contentAlignment = Alignment.Center) {
+                        Text("×", color = ink.inv, fontSize = 13.sp)
+                    }
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Pill("Camera", {
+                try {
+                    val dir = java.io.File(ctx.cacheDir, "camera").apply { mkdirs() }
+                    val f = java.io.File(dir, "shot_${System.currentTimeMillis()}.jpg")
+                    val u = androidx.core.content.FileProvider.getUriForFile(ctx, "com.stoa.app.files", f)
+                    camUri = u; camera.launch(u)
+                } catch (e: Exception) { E.toast("Camera unavailable", e.message ?: "") }
+            }, small = true, icon = Icons.Outlined.PhotoCamera)
+            Pill("Gallery", { gallery.launch("image/*") }, small = true, icon = Icons.Outlined.Image)
+            Spacer(Modifier.weight(1f))
+            Pill("Add", {
+                val t = text.trim(); val imgs = pics.toList()
+                if (t.isEmpty() && imgs.isEmpty()) return@Pill
+                text = ""; pics.clear()
+                scope.launch { E.addReadingNote(ctx, book, page, t, imgs) }
+            }, primary = true, small = true, icon = Icons.Outlined.Check)
+        }
+    }
 }
