@@ -1,5 +1,7 @@
 package com.stoa.app.ui
 
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.expandVertically
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -138,9 +140,39 @@ fun entries(ui: UiState): List<Entry> {
     return secs + ui.apps.filter { !ui.hidden.contains(it.pkg) }.map { val k = "app:${it.pkg}/${it.cls}"; val l = ui.renames[k] ?: it.label; Entry(k, l, l.take(1).uppercase(), it) }
 }
 
+/** Section shortcuts in your order, each with whether it's shown. */
+fun shortcuts(ui: UiState): List<Pair<Entry, Boolean>> {
+    val secs = entries(ui).filter { it.app == null }
+    val byKey = secs.associateBy { it.key }
+    val out = ArrayList<Pair<Entry, Boolean>>()
+    ui.shortcutPrefs.forEach { raw -> val k = raw.removePrefix("!"); byKey[k]?.let { e -> if (out.none { it.first.key == k }) out.add(e to !raw.startsWith("!")) } }
+    secs.forEach { e -> if (out.none { it.first.key == e.key }) out.add(e to true) }
+    return out
+}
+
+@Composable
+fun ShortcutEditor() {
+    val ui = LocalUi.current; val ink = LocalInk.current
+    if (!ui.editShortcuts) return
+    val list = shortcuts(ui)
+    fun save(l: List<Pair<Entry, Boolean>>) = ui.saveShortcuts(l.map { (if (it.second) "" else "!") + it.first.key })
+    Sheet("Shortcuts", { ui.editShortcuts = false }) {
+        Muted("Shown in the drawer and under the dock, in this order.", Modifier.padding(bottom = 8.dp), 12)
+        list.forEachIndexed { i, (e, on) ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(e.label, Modifier.weight(1f), color = if (on) ink.ink else ink.faint, fontSize = 16.sp)
+                IconBtn(Icons.Outlined.KeyboardArrowUp, "Up", { if (i > 0) save(list.toMutableList().apply { add(i - 1, removeAt(i)) }) }, tint = if (i > 0) ink.ink else ink.faint, size = 20.dp)
+                IconBtn(Icons.Outlined.KeyboardArrowDown, "Down", { if (i < list.size - 1) save(list.toMutableList().apply { add(i + 1, removeAt(i)) }) }, tint = if (i < list.size - 1) ink.ink else ink.faint, size = 20.dp)
+                Spacer(Modifier.width(6.dp))
+                Toggle(on) { v -> save(list.toMutableList().also { it[i] = e to v }) }
+            }
+        }
+    }
+}
+
 fun openEntry(ctx: Context, ui: UiState, e: Entry) {
     val a = e.app
-    if (a == null) { ui.go(e.key.removePrefix("sec:")); ui.homeTick++; return }
+    if (a == null) { ui.go(e.key.removePrefix("sec:")); return }
     val prefs = ui.prefs
     ui.noteLaunch(e.key)
     if (ui.mindful.contains(a.pkg) && prefs.passUntil(a.pkg) < System.currentTimeMillis() && !com.stoa.app.Watch.running) { ui.pauseFor = a; return }
@@ -218,6 +250,7 @@ fun Root() {
                     onOpen = { m -> ui.prefs.grantPass(a.pkg, m); ui.pauseFor = null; Apps.launch(ctx, a) })
             }
         }
+        ShortcutEditor()
         TimerWatcher()
         ToastHost(E)
     }
@@ -325,7 +358,7 @@ fun Drawer(open: Boolean, close: () -> Unit) {
     LaunchedEffect(Unit) { while (true) { now = LocalTime.now(); delay(10_000) } }
     val all = entries(ui)
     val apps = remember(all) { all.filter { it.app != null }.sortedBy { it.label.lowercase() } }
-    val secs = all.filter { it.app == null }
+    val secs = shortcuts(ui).filter { it.second }.map { it.first }
     val results = remember(q, all) { if (q.isBlank()) emptyList() else all.mapNotNull { e -> matchScore(e.label, q)?.let { e to it } }.sortedWith(compareBy<Pair<Entry, Int>> { it.second }.thenBy { it.first.label.length }).map { it.first } }
     val notes = remember(q, E.mdPaths) { if (q.trim().length > 1) E.searchNotes(q.trim()).take(6) else emptyList() }
     fun launch(e: Entry) { if (q.isNotBlank() && e.app != null) ui.noteSearched(e.key); openEntry(ctx, ui, e); if (e.app != null) close() }
@@ -348,7 +381,7 @@ fun Drawer(open: Boolean, close: () -> Unit) {
             keyboardActions = KeyboardActions(onGo = { go() }, onDone = { go() }, onSearch = { go() }),
             decorationBox = { inner -> Box { if (q.isEmpty()) Text("Search", style = TextStyle(fontFamily = Display, fontWeight = FontWeight.ExtraLight, fontSize = 34.sp, color = Color(0x55FFFFFF))); inner() } })
         if (q.isBlank()) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            secs.forEach { s -> Text(s.label.uppercase(), Modifier.clickable { launch(s) }.padding(vertical = 6.dp), style = mono.copy(color = Color(0xCCFFFFFF))) }
+            secs.forEach { s -> Text(s.label.uppercase(), Modifier.combinedClickable(onClick = { launch(s) }, onLongClick = { ui.editShortcuts = true }).padding(vertical = 6.dp), style = mono.copy(color = Color(0xCCFFFFFF))) }
             Text("SETTINGS", Modifier.clickable { ui.settings = true }.padding(vertical = 6.dp), style = mono)
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {

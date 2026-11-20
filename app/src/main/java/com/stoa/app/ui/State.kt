@@ -13,7 +13,7 @@ import org.json.JSONObject
 
 val SECTIONS = linkedMapOf(
     "home" to "Home", "today" to "Today", "almanac" to "Almanac", "notes" to "Notes", "gym" to "Gym",
-    "reading" to "Reading", "still" to "Stillness", "writing" to "Writing", "tasks" to "Book tasks",
+    "reading" to "Reading", "still" to "Stillness", "writing" to "Writing", "tasks" to "Tasks",
     "ideas" to "Ideas", "canvas" to "Canvas", "shots" to "Screenshots"
 )
 val SECTION_TAB = mapOf("reading" to "today", "still" to "today", "writing" to "today", "tasks" to "notes", "ideas" to "notes", "canvas" to "notes", "shots" to "notes", "gym" to "notes")
@@ -90,6 +90,10 @@ class UiState(val prefs: Prefs) {
     var dockCollapsed by mutableStateOf(prefs.bool("dock_collapsed", false))
     var dock by mutableStateOf(loadDock())
     var openFolder by mutableStateOf<String?>(null)
+    /** Quick shortcuts (drawer row + dock strip): order, with "!" marking hidden ones. */
+    var shortcutPrefs by mutableStateOf(prefs.jsonArr("shortcuts")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList())
+    fun saveShortcuts(l: List<String>) { shortcutPrefs = l; prefs.put("shortcuts", JSONArray(l).toString()) }
+    var editShortcuts by mutableStateOf(false)
     var renames by mutableStateOf(prefs.json("renames")?.let { j -> j.keys().asSequence().associateWith { j.optString(it) } } ?: emptyMap())
     fun rename(key: String, name: String) { renames = if (name.isBlank()) renames - key else renames + (key to name.trim()); prefs.put("renames", JSONObject(renames as Map<*, *>).toString()) }
     fun applyPack(p: String) { prefs.put("icon_pack", p); com.stoa.app.Apps.clearIcons(); iconPack = p; if (p.isNotEmpty() && greyIcons) { greyIcons = false; prefs.put("grey_icons", false) } }

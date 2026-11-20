@@ -124,7 +124,7 @@ fun HomePage(nest: NestedScrollConnection) {
             "seren" -> SerenCard()
             "due" -> DueCard()
         }
-        Spacer(Modifier.height(if (ui.dockCollapsed) 60.dp else 120.dp))
+        Spacer(Modifier.height(if (ui.dockCollapsed) 60.dp else 146.dp))
     }
     Dock(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 4.dp))
     FolderOverlay()

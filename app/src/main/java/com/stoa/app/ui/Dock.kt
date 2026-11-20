@@ -1,5 +1,7 @@
 package com.stoa.app.ui
 
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
@@ -130,6 +132,7 @@ fun FolderIcon(item: DockItem, size: Dp) {
 }
 
 /** The dock: frosted, collapsible, long-press to drag (drop onto another icon to make a folder). Icons shrink to fit as you add more. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun Dock(modifier: Modifier = Modifier) {
     val ui = LocalUi.current; val ctx = LocalContext.current; val ink = LocalInk.current; val haptic = LocalHapticFeedback.current; val dens = LocalDensity.current
@@ -159,9 +162,11 @@ fun Dock(modifier: Modifier = Modifier) {
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { ui.setCollapsed(true) }, contentAlignment = Alignment.Center) {
                     Box(Modifier.width(30.dp).height(3.dp).clip(RoundedCornerShape(2.dp)).background(ink.faint))
                 }
-                Box(Modifier.fillMaxWidth().height(iconSize + 26.dp)) {
+                val shorts = shortcuts(ui).filter { it.second }.map { it.first }
+                Box(Modifier.fillMaxWidth().height(iconSize + 26.dp + if (shorts.isNotEmpty()) 24.dp else 0.dp)) {
                     Glass(RoundedCornerShape(28.dp), Modifier.matchParentSize())
-                    Row(Modifier.fillMaxSize().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.fillMaxSize()) {
+                    Row(Modifier.fillMaxWidth().height(iconSize + 26.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         items.forEachIndexed { i, it ->
                             val shift = when {
                                 dragging < 0 || i == dragging || merging -> 0f
@@ -208,6 +213,12 @@ fun Dock(modifier: Modifier = Modifier) {
                                 if (it.isFolder) FolderIcon(it, iconSize) else AppIcon(it.key, iconSize)
                             }
                         }
+                    }
+                    if (shorts.isNotEmpty()) Row(Modifier.fillMaxWidth().height(22.dp).padding(horizontal = 14.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
+                        shorts.forEach { e ->
+                            Text(e.label.uppercase(), Modifier.combinedClickable(onClick = { openEntryKey(ctx, ui, e.key) }, onLongClick = { ui.editShortcuts = true }), fontFamily = Mono, fontSize = 9.sp, letterSpacing = 1.3.sp, color = ink.mute, maxLines = 1)
+                        }
+                    }
                     }
                 }
             }
