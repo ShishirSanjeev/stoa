@@ -66,7 +66,6 @@ fun AlmanacPage() {
     val keys = (0 until 7).map { keyOfIdx(ws + it) }
     val fmt = DateTimeFormatter.ofPattern("d MMM")
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).statusBarsPadding().navigationBarsPadding().padding(horizontal = 16.dp).padding(top = 10.dp, bottom = 28.dp)) {
-        H1("Almanac")
         Row(verticalAlignment = Alignment.CenterVertically) {
             Kicker((if (back == 0) "This week · " else if (back == 1) "Last week · " else "") + LocalDate.parse(keys[0]).format(fmt) + " – " + LocalDate.parse(keys[6]).format(fmt), Modifier.weight(1f))
             IconBtn(Icons.Outlined.ChevronLeft, "Previous week", { back++ }, size = 18.dp)

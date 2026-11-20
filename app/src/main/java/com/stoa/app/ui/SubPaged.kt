@@ -53,9 +53,7 @@ fun SubPaged(title: String, kicker: String?, key: String, subs: List<Pair<String
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         if (subs.size > 1) Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) { SegPager(subs, pager) { i -> scope.launch { pager.animateScrollToPage(i) } } }
-        Column(Modifier.padding(horizontal = 16.dp).padding(top = 10.dp)) {
-            H1(title); if (kicker != null) Kicker(kicker)
-        }
+        if (kicker != null) Kicker(kicker, Modifier.padding(horizontal = 16.dp).padding(top = 8.dp))
         HorizontalPager(pager, Modifier.fillMaxWidth().weight(1f), userScrollEnabled = false, key = { subs[it].first }) { i ->
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(horizontal = 16.dp).padding(top = 6.dp, bottom = 28.dp)) { content(subs[i].first) }
         }
