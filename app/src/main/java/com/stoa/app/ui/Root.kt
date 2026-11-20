@@ -110,37 +110,39 @@ fun Root() {
     val scope = rememberCoroutineScope()
     BoxWithConstraints(Modifier.fillMaxSize().background(ink.bg)) {
         val H = constraints.maxHeight.toFloat().coerceAtLeast(1f)
-        var dy by remember(H) { mutableFloatStateOf(H) }
+        // drawer position as a fraction (0 = open, 1 = closed) so the keyboard resizing the screen never moves it
+        var frac by remember { mutableFloatStateOf(1f) }
         var job by remember { mutableStateOf<Job?>(null) }
         fun settle(target: Float, v: Float = 0f) {
             job?.cancel()
-            job = scope.launch { animate(dy, target, v, spring(dampingRatio = .86f, stiffness = 330f)) { x, _ -> dy = x } }
+            job = scope.launch { animate(frac, target, v / H, spring(dampingRatio = .86f, stiffness = 330f)) { x, _ -> frac = x } }
         }
-        val drawerOpen = dy < H - 1f
+        fun moveBy(px: Float): Float { val n = (frac + px / H).coerceIn(0f, 1f); val used = (n - frac) * H; frac = n; return used }
+        val drawerOpen = frac < .999f
         LaunchedEffect(ui.drawerReq) { if (ui.drawerReq > 0) settle(0f) }
-        LaunchedEffect(ui.homeTick) { if (ui.homeTick > 0) settle(H) }
+        LaunchedEffect(ui.homeTick) { if (ui.homeTick > 0) settle(1f) }
         BackHandler(true) {
             when {
                 ui.canvas != null -> ui.canvas = null
                 ui.viewer != null -> ui.viewer = null
                 ui.pauseFor != null -> ui.pauseFor = null
                 ui.settings -> ui.settings = false
-                drawerOpen -> settle(H)
+                drawerOpen -> settle(1f)
                 ui.tab != "home" -> ui.tab = "home"
             }
         }
         val homeNest = remember(H) {
             object : NestedScrollConnection {
                 override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                    if (dy < H && available.y > 0 && source == NestedScrollSource.UserInput) { job?.cancel(); val n = (dy + available.y).coerceAtMost(H); val used = n - dy; dy = n; return Offset(0f, used) }
+                    if (frac < 1f && available.y > 0 && source == NestedScrollSource.UserInput) { job?.cancel(); return Offset(0f, moveBy(available.y)) }
                     return Offset.Zero
                 }
                 override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-                    if (available.y < 0 && source == NestedScrollSource.UserInput) { job?.cancel(); val n = (dy + available.y).coerceAtLeast(0f); val used = n - dy; dy = n; return Offset(0f, used) }
+                    if (available.y < 0 && source == NestedScrollSource.UserInput) { job?.cancel(); return Offset(0f, moveBy(available.y)) }
                     return Offset.Zero
                 }
                 override suspend fun onPreFling(available: Velocity): Velocity {
-                    if (dy < H - 1f && dy > 0f) { settle(if (available.y < -700f || (available.y <= 700f && dy < H * .72f)) 0f else H, available.y); return available }
+                    if (frac < .999f && frac > 0f) { settle(if (available.y < -700f || (available.y <= 700f && frac < .72f)) 0f else 1f, available.y); return available }
                     return Velocity.Zero
                 }
             }
@@ -148,15 +150,15 @@ fun Root() {
         val drawerNest = remember(H) {
             object : NestedScrollConnection {
                 override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                    if (dy > 0f && available.y < 0 && source == NestedScrollSource.UserInput) { job?.cancel(); val n = (dy + available.y).coerceAtLeast(0f); val used = n - dy; dy = n; return Offset(0f, used) }
+                    if (frac > 0f && available.y < 0 && source == NestedScrollSource.UserInput) { job?.cancel(); return Offset(0f, moveBy(available.y)) }
                     return Offset.Zero
                 }
                 override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-                    if (available.y > 0 && source == NestedScrollSource.UserInput) { job?.cancel(); val n = (dy + available.y).coerceAtMost(H); val used = n - dy; dy = n; return Offset(0f, used) }
+                    if (available.y > 0 && source == NestedScrollSource.UserInput) { job?.cancel(); return Offset(0f, moveBy(available.y)) }
                     return Offset.Zero
                 }
                 override suspend fun onPreFling(available: Velocity): Velocity {
-                    if (dy > 0f && dy < H) { settle(if (available.y > 700f || (available.y >= -700f && dy > H * .22f)) H else 0f, available.y); return available }
+                    if (frac > 0f && frac < 1f) { settle(if (available.y > 700f || (available.y >= -700f && frac > .22f)) 1f else 0f, available.y); return available }
                     return Velocity.Zero
                 }
             }
@@ -178,8 +180,8 @@ fun Root() {
             }
             BottomNav(tabs)
         }
-        if (dy < H) Box(Modifier.fillMaxSize().offset { IntOffset(0, dy.roundToInt()) }.clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)).background(Color.Black)) {
-            Drawer(drawerNest) { settle(H) }
+        if (frac < 1f) Box(Modifier.fillMaxSize().offset { IntOffset(0, (frac * H).roundToInt()) }.clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)).background(Color.Black)) {
+            Drawer(drawerNest) { settle(1f) }
         }
         ui.canvas?.let { CanvasEditor(it) }
         ui.viewer?.let { ShotViewer(it) }
