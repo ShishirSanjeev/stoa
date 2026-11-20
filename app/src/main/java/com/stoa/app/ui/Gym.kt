@@ -167,10 +167,10 @@ fun ActiveWorkout(a: Active, set: (Active?) -> Unit, custom: List<Pair<String, S
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 BasicTextField(a.name, { set(a.copy(name = it)) }, textStyle = TextStyle(color = ink.mute, fontSize = 11.sp, letterSpacing = 1.6.sp), cursorBrush = SolidColor(ink.ink), singleLine = true)
-                Text(fmtMs(now - a.start), fontFamily = Serif, fontSize = 34.sp, color = ink.ink)
+                Text(fmtMs(now - a.start), fontFamily = Display, fontWeight = FontWeight.Light, fontSize = 34.sp, color = ink.ink)
             }
             if (restEnd > now) {
-                Column(horizontalAlignment = Alignment.End) { Kicker("Rest"); Text(fmtMs(restEnd - now), fontFamily = Serif, fontSize = 34.sp, color = ink.ink) }
+                Column(horizontalAlignment = Alignment.End) { Kicker("Rest"); Text(fmtMs(restEnd - now), fontFamily = Display, fontWeight = FontWeight.Light, fontSize = 34.sp, color = ink.ink) }
                 IconBtn(Icons.Outlined.Close, "Stop rest", { p.put("rest_end", 0L); now = System.currentTimeMillis() }, size = 18.dp)
             } else Chips(listOf(60, 90, 120, 180), restLen, { "${it}s" }) { restLen = it; p.put("rest_len", it) }
         }

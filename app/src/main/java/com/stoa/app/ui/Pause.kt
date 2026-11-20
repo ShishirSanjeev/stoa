@@ -1,5 +1,6 @@
 package com.stoa.app.ui
 
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -49,9 +50,9 @@ fun PauseScreen(label: String, resisted: Int, onBack: () -> Unit, onOpen: (Int) 
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Box(Modifier.size(180.dp).graphicsLayer { scaleX = breath.value; scaleY = breath.value }.clip(CircleShape).background(ink.line).border(1.dp, ink.ink, CircleShape))
             Spacer(Modifier.height(8.dp))
-            Text(if (breath.value > .8f) "Breathe out." else "Breathe in.", fontFamily = Serif, fontSize = 32.sp, color = ink.ink)
+            Text(if (breath.value > .8f) "Breathe out." else "Breathe in.", fontFamily = Display, fontWeight = FontWeight.Light, fontSize = 32.sp, color = ink.ink)
             Text("You're about to open $label.\nIs this a choice, or a reflex?", color = ink.mute, fontSize = 15.sp, textAlign = TextAlign.Center, lineHeight = 21.sp)
-            if (left > 0) Text("$left", fontFamily = Serif, fontSize = 44.sp, color = ink.ink)
+            if (left > 0) Text("$left", fontFamily = Display, fontWeight = FontWeight.Light, fontSize = 44.sp, color = ink.ink)
             AnimatedVisibility(left == 0, enter = fadeIn() + slideInVertically { it / 3 }) {
                 Column(Modifier.widthIn(max = 320.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Pill("Not now — go back", onBack, Modifier.fillMaxWidth(), primary = true)

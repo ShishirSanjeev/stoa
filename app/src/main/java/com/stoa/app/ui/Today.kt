@@ -76,7 +76,7 @@ fun TodayPage() {
     val subs = ui.layout.on(ui.layout.today).ifEmpty { listOf("today") }
     if (!subs.contains(ui.todaySub)) ui.todaySub = subs.first()
     Page {
-        H1("Today"); Muted(LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, d MMMM")), size = 15)
+        H1("Today"); Kicker(LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE  d MMMM")))
         if (subs.size > 1) Seg(subs.map { it to (if (it == "today") "Today" else SECTIONS[it] ?: it) }, ui.todaySub, { ui.todaySub = it })
         AnimatedContent(ui.todaySub, label = "todaySub", transitionSpec = { (fadeIn(tween(220)) + slideInVertically(tween(300, easing = FastOutSlowInEasing)) { it / 30 }) togetherWith fadeOut(tween(90)) }) { s ->
             Column {
@@ -195,7 +195,7 @@ fun ProjectsCard() {
         list.take(8).forEachIndexed { i, (rel, _) ->
             val open = E.tasks[rel]?.count { it.status == "open" } ?: 0
             Row(Modifier.fillMaxWidth().clickable { Apps.openInObsidian(ctx, E.vaultName, rel) }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("${i + 1}", Modifier.width(24.dp), fontFamily = Serif, fontSize = 19.sp, color = ink.faint)
+                Text("${i + 1}", Modifier.width(24.dp), fontFamily = Display, fontWeight = FontWeight.Light, fontSize = 19.sp, color = ink.faint)
                 Text(rel.substringAfterLast('/').removeSuffix(".md"), Modifier.weight(1f), color = ink.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (open > 0) Muted("$open open", size = 12)
                 if (i > 0) IconBtn(Icons.Outlined.ArrowUpward, "Move up", {
@@ -257,11 +257,11 @@ fun ReadingView() {
             Row(Modifier.fillMaxWidth().clickable { Apps.openInObsidian(ctx, E.vaultName, cur) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.width(30.dp).height(44.dp).clip(RoundedCornerShape(topStart = 3.dp, bottomStart = 3.dp, topEnd = 6.dp, bottomEnd = 6.dp)).background(ink.ink))
                 Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) { Text(cur.substringAfterLast('/').removeSuffix(".md"), fontFamily = Serif, fontSize = 22.sp, color = ink.ink, lineHeight = 26.sp); Muted("Open the book's note in Obsidian", size = 12) }
+                Column(Modifier.weight(1f)) { Text(cur.substringAfterLast('/').removeSuffix(".md"), fontFamily = Display, fontWeight = FontWeight.Light, fontSize = 22.sp, color = ink.ink, lineHeight = 26.sp); Muted("Open the book's note in Obsidian", size = 12) }
                 IconBtn(Icons.AutoMirrored.Outlined.OpenInNew, "Open", { Apps.openInObsidian(ctx, E.vaultName, cur) }, size = 18.dp)
             }
             val pulse = rememberInfiniteTransition(label = "pulse").animateFloat(1f, if (running) .65f else 1f, infiniteRepeatable(tween(2000), RepeatMode.Reverse), label = "p")
-            Text(fmtMs(elapsed), Modifier.fillMaxWidth().padding(vertical = 18.dp).graphicsLayer { alpha = pulse.value }, fontFamily = Serif, fontSize = 64.sp, color = ink.ink, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Text(fmtMs(elapsed), Modifier.fillMaxWidth().padding(vertical = 18.dp).graphicsLayer { alpha = pulse.value }, fontFamily = Display, fontWeight = FontWeight.Light, fontSize = 64.sp, color = ink.ink, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (!active) Pill("Start reading", { p.put("read_path", cur); p.put("read_acc", 0L); p.put("read_at", System.currentTimeMillis()); p.put("read_running", true); ver++ }, Modifier.weight(1f), primary = true, icon = Icons.Outlined.PlayArrow)
                 else {
@@ -320,7 +320,7 @@ fun StillView() {
         val breath = rememberInfiniteTransition(label = "breath").animateFloat(.55f, 1f, infiniteRepeatable(tween(4000, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "b")
         Column(Modifier.fillMaxWidth().padding(vertical = 30.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) {
             Box(Modifier.size(190.dp).graphicsLayer { scaleX = breath.value; scaleY = breath.value }.clip(CircleShape).background(ink.line).border(1.dp, ink.ink, CircleShape))
-            Text(fmtMs(end - tick), fontFamily = Serif, fontSize = 64.sp, color = ink.ink)
+            Text(fmtMs(end - tick), fontFamily = Display, fontWeight = FontWeight.Light, fontSize = 64.sp, color = ink.ink)
             Muted(if (p.int("still_bell") > 0) "Bell every ${p.int("still_bell")} min" else "Sit. Breathe. Notice.", size = 14)
             Pill("End early", {
                 val m = ((System.currentTimeMillis() - p.long("still_start")) / 60000).toInt(); p.put("still_end", 0L); tick = 0L

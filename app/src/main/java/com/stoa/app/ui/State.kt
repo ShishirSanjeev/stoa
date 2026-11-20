@@ -17,19 +17,21 @@ val SECTIONS = linkedMapOf(
     "ideas" to "Ideas", "canvas" to "Canvas", "shots" to "Screenshots"
 )
 val SECTION_TAB = mapOf("reading" to "today", "still" to "today", "writing" to "notes", "tasks" to "notes", "ideas" to "notes", "canvas" to "notes", "shots" to "notes")
-val HOME_WIDGETS = linkedMapOf("level" to "Level & XP", "three" to "Today's three", "screen" to "Screen time", "due" to "Due soon", "seren" to "Serendipity", "capture" to "Capture an idea")
+val HOME_WIDGETS = linkedMapOf("level" to "Level & XP", "quick" to "Quick shortcuts", "three" to "Today's three", "screen" to "Screen time", "due" to "Due soon", "seren" to "Serendipity", "capture" to "Capture an idea")
+val QUICK = linkedMapOf("idea" to "Idea", "task" to "Task", "daily" to "Daily note", "read" to "Read", "still" to "Breathe", "gym" to "Lift", "canvas" to "Canvas", "shots" to "Shots", "search" to "Search")
 val TODAY_SECTIONS = linkedMapOf("three" to "Today's three", "routines" to "Routines", "habits" to "Habits", "projects" to "Projects")
 
 /** What's shown and in which order. Device-local; edited from Settings → Layout. */
 data class Layout(
     val tabs: List<Pair<String, Boolean>>, val home: List<Pair<String, Boolean>>, val today: List<Pair<String, Boolean>>,
-    val todaySections: List<Pair<String, Boolean>>, val notes: List<Pair<String, Boolean>>, val dock: List<String>
+    val todaySections: List<Pair<String, Boolean>>, val notes: List<Pair<String, Boolean>>, val dock: List<String>,
+    val quick: List<Pair<String, Boolean>> = QUICK.keys.map { it to (it != "canvas" && it != "task") }
 ) {
     fun on(list: List<Pair<String, Boolean>>) = list.filter { it.second }.map { it.first }
     fun toJson(): String {
         fun arr(l: List<Pair<String, Boolean>>) = JSONArray(l.map { JSONArray(listOf(it.first, it.second)) })
         return JSONObject().put("tabs", arr(tabs)).put("home", arr(home)).put("today", arr(today)).put("todaySections", arr(todaySections))
-            .put("notes", arr(notes)).put("dock", JSONArray(dock)).toString()
+            .put("notes", arr(notes)).put("dock", JSONArray(dock)).put("quick", arr(quick)).toString()
     }
     companion object {
         val DEFAULT = Layout(
@@ -47,7 +49,7 @@ data class Layout(
                 return got + def.filter { d -> got.none { it.first == d.first } }
             }
             val dock = j.optJSONArray("dock")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: DEFAULT.dock
-            return Layout(list("tabs", DEFAULT.tabs), list("home", DEFAULT.home), list("today", DEFAULT.today), list("todaySections", DEFAULT.todaySections), list("notes", DEFAULT.notes), dock)
+            return Layout(list("tabs", DEFAULT.tabs), list("home", DEFAULT.home), list("today", DEFAULT.today), list("todaySections", DEFAULT.todaySections), list("notes", DEFAULT.notes), dock, list("quick", DEFAULT.quick))
         }
     }
 }
@@ -63,6 +65,8 @@ class UiState(val prefs: Prefs) {
     var drawerReq by mutableIntStateOf(0)
     var homeTick by mutableIntStateOf(0)
     var shots by mutableStateOf<List<android.net.Uri>>(emptyList())
+    var reader by mutableStateOf<String?>(null)
+    var capture by mutableStateOf<String?>(null)
     var layout by mutableStateOf(Layout.load(prefs))
     var resume by mutableIntStateOf(0)
     var apps by mutableStateOf<List<LApp>>(emptyList())

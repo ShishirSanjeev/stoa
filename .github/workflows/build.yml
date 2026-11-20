@@ -17,6 +17,25 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+      - name: Fetch fonts (Outfit, JetBrains Mono) from Google Fonts
+        run: |
+          set -e
+          mkdir -p app/src/main/res/font
+          get() {
+            css=$(curl -fsSL -A "Wget/1.21" "https://fonts.googleapis.com/css2?family=$1:wght@$2")
+            url=$(printf '%s' "$css" | grep -o 'https://[^)]*' | head -1)
+            echo "$1 $2 -> $url"
+            curl -fsSL "$url" -o "app/src/main/res/font/$3.ttf"
+            head -c 4 "app/src/main/res/font/$3.ttf" | od -An -tx1
+          }
+          get Outfit 200 outfit_extralight
+          get Outfit 300 outfit_light
+          get Outfit 400 outfit_regular
+          get Outfit 500 outfit_medium
+          get Outfit 600 outfit_semibold
+          get JetBrains+Mono 400 jbmono_regular
+          get JetBrains+Mono 500 jbmono_medium
+          ls -la app/src/main/res/font
       - name: Build
         run: gradle :app:assembleRelease --stacktrace
       - name: Rename APK

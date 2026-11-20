@@ -1,6 +1,21 @@
 package com.stoa.app.ui
 
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.outlined.AddTask
+import androidx.compose.material.icons.outlined.CalendarToday
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.FitnessCenter
+import androidx.compose.material.icons.outlined.Gesture
+import androidx.compose.material.icons.outlined.Lightbulb
+import androidx.compose.material.icons.outlined.MenuBook
+import androidx.compose.material.icons.outlined.Screenshot
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.SelfImprovement
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -81,8 +96,8 @@ fun HomePage(nest: NestedScrollConnection, openDrawer: () -> Unit) {
     Page(nest) {
         Row(verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
-                Text(time.format(DateTimeFormatter.ofPattern("HH:mm")), fontFamily = Serif, fontSize = 78.sp, lineHeight = 78.sp, color = ink.ink)
-                Muted(LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, d MMMM")), size = 15)
+                Text(time.format(DateTimeFormatter.ofPattern("HH:mm")), fontFamily = Display, fontWeight = FontWeight.ExtraLight, fontSize = 96.sp, lineHeight = 96.sp, letterSpacing = (-3).sp, color = ink.ink)
+                Text(LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE  d MMMM")).uppercase(), fontFamily = Mono, fontSize = 11.sp, letterSpacing = 1.8.sp, color = ink.mute)
             }
             IconBtn(Icons.Outlined.Tune, "Settings & layout", { ui.settings = true })
         }
@@ -90,6 +105,7 @@ fun HomePage(nest: NestedScrollConnection, openDrawer: () -> Unit) {
         E.error?.let { err -> StoaCard("Set up") { Muted(err, size = 14); Spacer(Modifier.height(10.dp)); Pill("Open settings", { ui.settings = true }, primary = true) } }
         for (w in ui.layout.on(ui.layout.home)) when (w) {
             "level" -> StoaCard(flat = true) { LevelBlock(E.rpg) }
+            "quick" -> QuickRow()
             "three" -> ThreeCard()
             "screen" -> ScreenTimeCard()
             "due" -> DueCard()
@@ -157,7 +173,7 @@ fun ScreenTimeCard() {
         if (!has) { Muted("Let Stoa see how long you spend in each app today.", size = 14); Spacer(Modifier.height(10.dp)); Pill("Allow usage access", { Apps.askUsage(ctx) }, small = true); return@StoaCard }
         val total = data.sumOf { it.second }
         Row(verticalAlignment = Alignment.Bottom) {
-            Text(fmtDur(total), fontFamily = Serif, fontSize = 34.sp, color = ink.ink, modifier = Modifier.weight(1f))
+            Text(fmtDur(total), fontFamily = Display, fontWeight = FontWeight.Light, fontSize = 34.sp, color = ink.ink, modifier = Modifier.weight(1f))
             Muted("$resisted urge${if (resisted == 1) "" else "s"} resisted", size = 12)
         }
         val mx = (data.firstOrNull()?.second ?: 1L).toFloat()
@@ -201,10 +217,10 @@ fun SerenCard() {
     StoaCard("Serendipity", action = { IconBtn(Icons.Outlined.Refresh, "Another one", { reroll++ }, size = 18.dp) }) {
         val c = clip
         if (pick == null) { Empty("Nothing in “${E.clippings}” yet. Clip a page with the Web Clipper and it will drift up here."); return@StoaCard }
-        Column(Modifier.animateContentSize().clickable { Apps.openInObsidian(ctx, E.vaultName, pick) }) {
+        Column(Modifier.animateContentSize().clickable { ui.reader = pick }) {
             if (c?.thumb != null) AsyncImage(c.thumb, null, Modifier.fillMaxWidth().height(150.dp).padding(bottom = 10.dp).clip(RoundedCornerShape(12.dp)), contentScale = ContentScale.Crop,
                 colorFilter = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) }))
-            Text(c?.title ?: pick.substringAfterLast('/').removeSuffix(".md"), fontFamily = Serif, fontSize = 24.sp, lineHeight = 28.sp, color = ink.ink)
+            Text(c?.title ?: pick.substringAfterLast('/').removeSuffix(".md"), fontFamily = Display, fontWeight = FontWeight.Light, fontSize = 24.sp, lineHeight = 28.sp, color = ink.ink)
             if (!c?.quote.isNullOrBlank()) { Spacer(Modifier.height(6.dp)); Muted(c!!.quote, size = 14) }
             if (!c?.meta.isNullOrBlank()) { Spacer(Modifier.height(6.dp)); Muted(c!!.meta, size = 12) }
         }
@@ -232,3 +248,91 @@ fun CaptureCard() {
         Spacer(Modifier.height(6.dp)); Muted("Ideas land in ${E.capture.substringAfterLast('/')} · start with /task to add to your Inbox", size = 12)
     }
 }
+
+private val QUICK_ICONS = mapOf("idea" to Icons.Outlined.Lightbulb, "task" to Icons.Outlined.AddTask, "daily" to Icons.Outlined.CalendarToday, "read" to Icons.Outlined.MenuBook,
+    "still" to Icons.Outlined.SelfImprovement, "gym" to Icons.Outlined.FitnessCenter, "canvas" to Icons.Outlined.Gesture, "shots" to Icons.Outlined.Screenshot, "search" to Icons.Outlined.Search)
+
+/** One-tap shortcuts into the parts of Stoa you use most. */
+@Composable
+fun QuickRow() {
+    val E = LocalEngine.current; val ui = LocalUi.current; val ink = LocalInk.current; val ctx = LocalContext.current; val scope = rememberCoroutineScope()
+    val keys = ui.layout.on(ui.layout.quick)
+    if (keys.isEmpty()) return
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        keys.forEach { k ->
+            Column(Modifier.press({
+                when (k) {
+                    "idea", "task" -> ui.capture = k
+                    "daily" -> scope.launch { val rel = E.ensureDaily(); Apps.openInObsidian(ctx, E.vaultName, rel) }
+                    "read" -> ui.go("reading"); "still" -> ui.go("still"); "gym" -> ui.go("gym"); "canvas" -> ui.go("canvas"); "shots" -> ui.go("shots")
+                    "search" -> ui.drawerReq++
+                }
+            }), horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(Modifier.size(54.dp).clip(CircleShape).border(1.dp, ink.line2, CircleShape), contentAlignment = Alignment.Center) {
+                    Icon(QUICK_ICONS[k] ?: Icons.Outlined.Search, QUICK[k], Modifier.size(22.dp), tint = ink.ink)
+                }
+                Spacer(Modifier.height(6.dp))
+                Text((QUICK[k] ?: k).uppercase(), fontFamily = Mono, fontSize = 9.sp, letterSpacing = 1.2.sp, color = ink.mute)
+            }
+        }
+    }
+}
+
+/** A quick sheet for an idea (→ Quick Capture) or a task (→ Inbox). */
+@Composable
+fun CaptureSheet(kind: String) {
+    val E = LocalEngine.current; val ui = LocalUi.current; val scope = rememberCoroutineScope()
+    var text by remember { mutableStateOf("") }
+    val fr = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(Unit) { delay(250); try { fr.requestFocus() } catch (e: Exception) { } }
+    Sheet(if (kind == "task") "New task" else "New idea", { ui.capture = null }) {
+        Field(text, { text = it }, if (kind == "task") "What needs doing?" else "What just crossed your mind?", singleLine = kind == "task",
+            modifier = Modifier.focusRequester(fr).heightIn(min = if (kind == "task") 0.dp else 110.dp), style = androidx.compose.ui.text.TextStyle(fontSize = 18.sp, lineHeight = 26.sp),
+            onDone = { if (kind == "task") { val t = text.trim(); if (t.isNotEmpty()) scope.launch { E.addTask(E.inbox, null, t); E.toast("Task added", "Inbox", "ach") }; ui.capture = null } })
+        Spacer(Modifier.height(12.dp))
+        Pill(if (kind == "task") "Add to Inbox" else "Capture", {
+            val t = text.trim(); if (t.isNotEmpty()) scope.launch { if (kind == "task") { E.addTask(E.inbox, null, t); E.toast("Task added", "Inbox", "ach") } else E.captureIdea(t) }; ui.capture = null
+        }, Modifier.fillMaxWidth(), primary = true)
+    }
+}
+
+/** Read a web clipping right here, in calm type. */
+@Composable
+fun ClipReader(rel: String) {
+    val E = LocalEngine.current; val ui = LocalUi.current; val ink = LocalInk.current; val ctx = LocalContext.current
+    val data by produceState<Pair<Map<String, Any?>, String>?>(null, rel) { value = withContext(Dispatchers.IO) { E.readText(rel)?.let { val sp = Frontmatter.split(it); sp.fm to sp.body } } }
+    Box(Modifier.fillMaxSize().background(ink.bg)) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).statusBarsPadding().padding(horizontal = 22.dp).padding(top = 56.dp, bottom = 60.dp)) {
+            val fm = data?.first ?: emptyMap(); val body = data?.second ?: ""
+            val thumb = (fm["thumbnail"] ?: fm["image"] ?: fm["cover"])?.toString()
+            if (thumb != null) AsyncImage(thumb, null, Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(14.dp)), contentScale = ContentScale.Crop,
+                colorFilter = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) }))
+            Spacer(Modifier.height(18.dp))
+            Text(rel.substringAfterLast('/').removeSuffix(".md"), fontFamily = Display, fontWeight = FontWeight.Light, fontSize = 32.sp, lineHeight = 36.sp, color = ink.ink)
+            val host = (fm["source"] ?: fm["url"])?.toString()?.let { try { java.net.URI(it).host?.removePrefix("www.") } catch (e: Exception) { null } }
+            Text(listOfNotNull(fm["author"].asList().firstOrNull()?.let { stripMd(it) }, host, fm["published"]?.toString()).joinToString("  ·  ").uppercase(),
+                Modifier.padding(top = 10.dp, bottom = 18.dp), fontFamily = Mono, fontSize = 10.sp, letterSpacing = 1.2.sp, color = ink.mute)
+            body.split("\n").map { it.trimEnd() }.forEach { l ->
+                val t = l.trim()
+                when {
+                    t.isEmpty() || t.startsWith("![") || t.startsWith("%%") || t.startsWith("_No captions") -> {}
+                    t.startsWith("#") -> Text(stripMd(t.trimStart('#').trim()), Modifier.padding(top = 18.dp, bottom = 6.dp), fontFamily = Display, fontWeight = FontWeight.Medium, fontSize = 20.sp, color = ink.ink)
+                    Regex("^[-*+]\\s+").containsMatchIn(t) -> Row(Modifier.padding(vertical = 3.dp)) { Text("·  ", color = ink.mute, fontSize = 17.sp); Text(clean(t.replace(Regex("^[-*+]\\s+(\\[.\\]\\s+)?"), "")), color = ink.ink, fontSize = 17.sp, lineHeight = 27.sp) }
+                    t.startsWith(">") -> Text(clean(t.trimStart('>').trim()), Modifier.padding(vertical = 6.dp).padding(start = 14.dp), color = ink.mute, fontSize = 17.sp, lineHeight = 27.sp, fontWeight = FontWeight.Light)
+                    else -> Text(clean(t), Modifier.padding(vertical = 6.dp), color = ink.ink, fontSize = 17.sp, lineHeight = 27.sp)
+                }
+            }
+            val src = (fm["source"] ?: fm["url"])?.toString()
+            Row(Modifier.padding(top = 26.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Pill("Open in Obsidian", { Apps.openInObsidian(ctx, E.vaultName, rel) }, small = true)
+                if (src != null) Pill("Source", { Apps.openUrl(ctx, src) }, small = true)
+            }
+        }
+        Row(Modifier.fillMaxWidth().background(ink.bg).statusBarsPadding().padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconBtn(Icons.Outlined.Close, "Close", { ui.reader = null }, tint = ink.ink)
+            Box(Modifier.weight(1f)); Kicker("Serendipity")
+            Spacer(Modifier.width(14.dp))
+        }
+    }
+}
+private fun clean(s: String) = stripMd(s).replace(Regex("[*_`~=]{1,3}"), "").replace(Regex("<[^>]+>"), "")

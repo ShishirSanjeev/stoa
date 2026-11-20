@@ -1,5 +1,6 @@
 package com.stoa.app.ui
 
+import androidx.compose.ui.text.font.FontWeight
 import android.Manifest
 import android.content.ContentUris
 import android.content.Context
@@ -42,6 +43,12 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Share
@@ -111,7 +118,7 @@ fun BookHeader(onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.width(24.dp).height(34.dp).clip(RoundedCornerShape(topStart = 3.dp, bottomStart = 3.dp, topEnd = 6.dp, bottomEnd = 6.dp)).background(ink.ink))
         Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) { Kicker("Writing for"); Text(E.bookName, fontFamily = Serif, fontSize = 19.sp, color = ink.ink, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        Column(Modifier.weight(1f)) { Kicker("Writing for"); Text(E.bookName, fontFamily = Display, fontWeight = FontWeight.Light, fontSize = 19.sp, color = ink.ink, maxLines = 1, overflow = TextOverflow.Ellipsis) }
         IconBtn(Icons.AutoMirrored.Outlined.OpenInNew, "Open book note", onClick, size = 17.dp)
     }
 }
@@ -134,9 +141,9 @@ fun Writing() {
     StoaCard {
         BookHeader { Apps.openInObsidian(ctx, E.vaultName, E.bookNote) }
         Spacer(Modifier.height(6.dp)); Divider()
-        Field(title, { title = it; p.put("draft_title", it) }, "Title", style = TextStyle(fontFamily = Serif, fontSize = 24.sp), border = false)
+        Field(title, { title = it; p.put("draft_title", it) }, "Title", style = TextStyle(fontFamily = Display, fontWeight = FontWeight.Light, fontSize = 24.sp), border = false)
         Field(text, { text = it; p.put("draft_text", it) }, "Write. It saves as you go.", singleLine = false, border = false,
-            style = TextStyle(fontFamily = Serif, fontSize = 19.sp, lineHeight = 30.sp), modifier = Modifier.heightIn(min = 240.dp))
+            style = TextStyle(fontFamily = Display, fontWeight = FontWeight.Light, fontSize = 19.sp, lineHeight = 30.sp), modifier = Modifier.heightIn(min = 240.dp))
         Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Muted("$words words", Modifier.weight(1f), 12)
             Pill("Import", { importer.launch("text/*") }, small = true, icon = Icons.Outlined.AttachFile)
@@ -245,20 +252,59 @@ fun queryShots(ctx: Context): List<Uri> {
 }
 fun hasImages(ctx: Context) = ctx.checkSelfPermission(if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
 
+/** Moves screenshots to the phone's trash (recoverable for 30 days); Android asks once for the whole batch. */
+@Composable
+fun rememberTrasher(onDone: (List<Uri>) -> Unit): (List<Uri>) -> Unit {
+    val ctx = LocalContext.current
+    var pending by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { r -> if (r.resultCode == android.app.Activity.RESULT_OK) onDone(pending); pending = emptyList() }
+    return { uris ->
+        if (uris.isNotEmpty()) {
+            if (Build.VERSION.SDK_INT >= 30) {
+                pending = uris
+                val pi = MediaStore.createTrashRequest(ctx.contentResolver, uris, true)
+                launcher.launch(androidx.activity.result.IntentSenderRequest.Builder(pi.intentSender).build())
+            } else { uris.forEach { try { ctx.contentResolver.delete(it, null, null) } catch (e: Exception) { } }; onDone(uris) }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun Shots() {
-    val ui = LocalUi.current; val ctx = LocalContext.current
+    val ui = LocalUi.current; val ctx = LocalContext.current; val ink = LocalInk.current; val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     var granted by remember { mutableStateOf(hasImages(ctx)) }
     val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted = it }
     var n by remember { mutableIntStateOf(60) }
+    var sel by remember { mutableStateOf<Set<Uri>>(emptySet()) }
+    val trash = rememberTrasher { gone -> ui.shots = ui.shots - gone.toSet(); sel = emptySet() }
     LaunchedEffect(granted, ui.resume) { if (granted) ui.shots = withContext(Dispatchers.IO) { queryShots(ctx) } }
     if (!granted) { StoaCard("Screenshots") { Muted("Let Stoa show the screenshots on your phone.", size = 14); Spacer(Modifier.height(10.dp))
         Pill("Allow photos access", { ask.launch(if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE) }, primary = true) }; return }
-    Muted("${ui.shots.size} screenshots · newest first", Modifier.padding(4.dp), 12)
+    val selecting = sel.isNotEmpty()
+    Row(Modifier.fillMaxWidth().height(44.dp).padding(horizontal = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (!selecting) Muted("${ui.shots.size} screenshots · hold to select", Modifier.weight(1f), 12)
+        else {
+            Text("${sel.size} selected", Modifier.weight(1f), color = ink.ink, fontSize = 15.sp)
+            Pill("All", { sel = ui.shots.take(n).toSet() }, small = true); Spacer(Modifier.width(6.dp))
+            Pill("Delete", { trash(sel.toList()) }, small = true, warn = true, icon = Icons.Outlined.Delete); Spacer(Modifier.width(2.dp))
+            IconBtn(Icons.Outlined.Close, "Cancel", { sel = emptySet() }, size = 18.dp)
+        }
+    }
     ui.shots.take(n).chunked(3).forEachIndexed { r, row ->
         Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             row.forEachIndexed { c, uri ->
-                AsyncImage(uri, null, Modifier.weight(1f).aspectRatio(9f / 16f).clip(RoundedCornerShape(8.dp)).background(LocalInk.current.line).clickable { ui.viewer = r * 3 + c }, contentScale = ContentScale.Crop)
+                val on = sel.contains(uri)
+                val sc by androidx.compose.animation.core.animateFloatAsState(if (on) .88f else 1f, androidx.compose.animation.core.spring(dampingRatio = .6f), label = "shot")
+                Box(Modifier.weight(1f).aspectRatio(9f / 16f).graphicsLayer { scaleX = sc; scaleY = sc }.clip(RoundedCornerShape(10.dp)).background(ink.line)
+                    .combinedClickable(onClick = { if (selecting) sel = if (on) sel - uri else sel + uri else ui.viewer = r * 3 + c },
+                        onLongClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress); sel = if (on) sel - uri else sel + uri })) {
+                    AsyncImage(uri, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                    if (selecting) Box(Modifier.align(Alignment.TopEnd).padding(7.dp).size(22.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(if (on) Color.White else Color(0x55000000)).border(1.5.dp, Color.White, androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) {
+                        if (on) androidx.compose.material3.Icon(Icons.Outlined.Check, null, Modifier.size(14.dp), tint = Color.Black)
+                    }
+                }
             }
             repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
         }
@@ -273,6 +319,7 @@ fun ShotViewer(start: Int) {
     val shots = ui.shots
     if (shots.isEmpty()) { ui.viewer = null; return }
     val pager = rememberPagerState(initialPage = start.coerceIn(0, shots.size - 1)) { shots.size }
+    val trash = rememberTrasher { gone -> ui.shots = ui.shots - gone.toSet(); if (ui.shots.isEmpty()) ui.viewer = null }
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         HorizontalPager(pager, Modifier.fillMaxSize()) { i -> AsyncImage(shots[i], null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit) }
         Row(Modifier.fillMaxWidth().statusBarsPadding().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -281,6 +328,7 @@ fun ShotViewer(start: Int) {
             IconBtn(Icons.Outlined.Share, "Share", {
                 ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("image/*").putExtra(Intent.EXTRA_STREAM, shots[pager.currentPage]).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION), null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }, tint = Color.White)
+            IconBtn(Icons.Outlined.Delete, "Delete", { trash(listOf(shots[pager.currentPage])) }, tint = Color.White)
             IconBtn(Icons.Outlined.Description, "Open", {
                 try { ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(shots[pager.currentPage], "image/*").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (e: Exception) { }
             }, tint = Color.White)

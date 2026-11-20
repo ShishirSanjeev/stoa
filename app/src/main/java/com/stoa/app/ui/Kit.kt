@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -88,27 +89,27 @@ fun fmtDur(ms: Long): String { val m = ms / 60000; return if (m >= 60) "${m / 60
 
 @Composable
 fun Kicker(text: String, modifier: Modifier = Modifier, color: Color = LocalInk.current.mute) =
-    Text(text.uppercase(), modifier, color = color, fontSize = 10.5.sp, letterSpacing = 1.8.sp)
+    Text(text.uppercase(), modifier, color = color, fontSize = 10.sp, letterSpacing = 1.5.sp, fontFamily = Mono)
 
 @Composable
 fun Muted(text: String, modifier: Modifier = Modifier, size: Int = 13, maxLines: Int = Int.MAX_VALUE) =
     Text(text, modifier, color = LocalInk.current.mute, fontSize = size.sp, maxLines = maxLines, overflow = TextOverflow.Ellipsis, lineHeight = (size + 5).sp)
 
 @Composable
-fun H1(text: String) = Text(text, fontFamily = Serif, fontSize = 40.sp, color = LocalInk.current.ink, lineHeight = 44.sp)
+fun H1(text: String) = Text(text, fontFamily = Display, fontWeight = FontWeight.Light, fontSize = 44.sp, color = LocalInk.current.ink, lineHeight = 48.sp, letterSpacing = (-0.5).sp)
 
+/** A section: hairline above, a small mono label, generous air. No boxes. */
 @Composable
 fun StoaCard(title: String? = null, modifier: Modifier = Modifier, flat: Boolean = false, action: (@Composable () -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
     val ink = LocalInk.current
-    Column(modifier.fillMaxWidth().padding(vertical = 6.dp).clip(RoundedCornerShape(18.dp))
-        .then(if (flat) Modifier else Modifier.background(ink.card).border(1.dp, ink.line, RoundedCornerShape(18.dp)))
-        .padding(horizontal = if (flat) 2.dp else 16.dp, vertical = 14.dp)) {
+    Column(modifier.fillMaxWidth().padding(top = if (flat) 6.dp else 18.dp, bottom = 6.dp)) {
+        if (!flat) Box(Modifier.fillMaxWidth().height(1.dp).background(ink.line))
         if (title != null || action != null) {
-            Row(Modifier.fillMaxWidth().height(28.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().heightIn(min = 34.dp).padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Kicker(title ?: "", Modifier.weight(1f)); action?.invoke()
             }
             Spacer(Modifier.height(4.dp))
-        }
+        } else if (!flat) Spacer(Modifier.height(12.dp))
         content()
     }
 }
@@ -177,22 +178,24 @@ fun CheckRow(checked: Boolean, text: String, onToggle: (Boolean) -> Unit, lead: 
 @Composable
 fun XpHint(n: Int) = Text("+$n", color = LocalInk.current.faint, fontSize = 11.sp)
 
-/** Segmented control with a sliding indicator. */
+/** Text tabs with a sliding hairline underneath. */
 @Composable
 fun Seg(items: List<Pair<String, String>>, selected: String, onPick: (String) -> Unit, modifier: Modifier = Modifier) {
     val ink = LocalInk.current
-    BoxWithConstraints(modifier.fillMaxWidth().padding(vertical = 10.dp).clip(RoundedCornerShape(14.dp)).background(ink.line).padding(3.dp)) {
+    BoxWithConstraints(modifier.fillMaxWidth().padding(top = 14.dp, bottom = 4.dp)) {
         val w = maxWidth / items.size.coerceAtLeast(1)
         val idx = items.indexOfFirst { it.first == selected }.coerceAtLeast(0)
-        val x by animateDpAsState(w * idx, spring(dampingRatio = .8f, stiffness = 420f), label = "seg")
-        Box(Modifier.offset(x = x).width(w).height(36.dp).clip(RoundedCornerShape(11.dp)).background(ink.card))
-        Row(Modifier.fillMaxWidth().height(36.dp)) {
-            items.forEach { (k, label) ->
-                val c by animateColorAsState(if (k == selected) ink.ink else ink.mute, label = "segc")
-                Box(Modifier.weight(1f).fillMaxHeight().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onPick(k) }, contentAlignment = Alignment.Center) {
-                    Text(label, color = c, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        val x by animateDpAsState(w * idx, spring(dampingRatio = .82f, stiffness = 420f), label = "seg")
+        Column {
+            Row(Modifier.fillMaxWidth().height(38.dp)) {
+                items.forEach { (k, label) ->
+                    val c by animateColorAsState(if (k == selected) ink.ink else ink.faint, label = "segc")
+                    Box(Modifier.weight(1f).fillMaxHeight().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onPick(k) }, contentAlignment = Alignment.CenterStart) {
+                        Text(label.uppercase(), color = c, fontSize = 10.5.sp, letterSpacing = 1.4.sp, fontFamily = Mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 }
             }
+            Box(Modifier.fillMaxWidth().height(1.dp).background(ink.line)) { Box(Modifier.offset(x = x).width(w * .6f).height(1.dp).background(ink.ink)) }
         }
     }
 }
@@ -215,7 +218,7 @@ fun Field(value: String, onChange: (String) -> Unit, placeholder: String, modifi
           style: TextStyle? = null, border: Boolean = true, minHeight: Dp = 0.dp, light: Boolean = false) {
     val ink = LocalInk.current
     val fg = if (light) Color.White else ink.ink
-    val ts = (style ?: TextStyle(fontSize = 15.5.sp)).copy(color = fg)
+    val ts = (style ?: TextStyle(fontSize = 15.5.sp)).let { it.copy(color = fg, fontFamily = it.fontFamily ?: Display) }
     BasicTextField(value, onChange, modifier.fillMaxWidth(), textStyle = ts, singleLine = singleLine, cursorBrush = SolidColor(fg),
         keyboardOptions = KeyboardOptions(imeAction = if (singleLine) ImeAction.Done else ImeAction.Default),
         keyboardActions = KeyboardActions(onDone = { onDone?.invoke() }),
@@ -234,7 +237,7 @@ fun Sheet(title: String, onDismiss: () -> Unit, content: @Composable ColumnScope
     val ink = LocalInk.current
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = ink.card, contentColor = ink.ink) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
-            Text(title, fontFamily = Serif, fontSize = 26.sp, color = ink.ink)
+            Text(title, fontFamily = Display, fontWeight = FontWeight.Light, fontSize = 26.sp, color = ink.ink)
             Spacer(Modifier.height(8.dp))
             content()
         }
@@ -246,7 +249,7 @@ fun AskDialog(title: String, fields: List<Pair<String, String>>, ok: String, onD
     val ink = LocalInk.current
     val vals = remember { mutableStateListOf(*fields.map { it.second }.toTypedArray()) }
     AlertDialog(onDismissRequest = onDismiss, containerColor = ink.card, titleContentColor = ink.ink,
-        title = { Text(title, fontFamily = Serif, fontSize = 24.sp) },
+        title = { Text(title, fontFamily = Display, fontWeight = FontWeight.Light, fontSize = 24.sp) },
         text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { fields.forEachIndexed { i, f -> Field(vals[i], { vals[i] = it }, f.first, onDone = { if (i == fields.size - 1) onOk(vals.toList()) }) } } },
         confirmButton = { TextButton({ onOk(vals.toList()) }) { Text(ok, color = ink.ink, fontWeight = FontWeight.SemiBold) } },
         dismissButton = { TextButton(onDismiss) { Text("Cancel", color = ink.mute) } })
@@ -264,7 +267,7 @@ fun LevelBlock(rpg: Rpg?, compact: Boolean = false) {
                 drawArc(ink.line2, 0f, 360f, false, style = st)
                 drawArc(ink.ink, -90f, 360f * pct, false, style = st)
             }
-            Text(rpg?.level?.toString() ?: "·", fontFamily = Serif, fontSize = if (compact) 21.sp else 26.sp, color = ink.ink)
+            Text(rpg?.level?.toString() ?: "·", fontFamily = Display, fontWeight = FontWeight.Light, fontSize = if (compact) 20.sp else 25.sp, color = ink.ink)
         }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
@@ -308,7 +311,7 @@ fun StatRow(vararg stats: Pair<String, String>) {
     val ink = LocalInk.current
     Row(Modifier.fillMaxWidth()) {
         stats.forEach { (n, l) -> Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(n, fontFamily = Serif, fontSize = 30.sp, color = ink.ink); Text(l, color = ink.mute, fontSize = 11.5.sp)
+            Text(n, fontFamily = Display, fontWeight = FontWeight.Light, fontSize = 32.sp, color = ink.ink); Text(l.uppercase(), color = ink.mute, fontSize = 9.5.sp, letterSpacing = 1.2.sp, fontFamily = Mono)
         } }
     }
 }

@@ -202,7 +202,7 @@ class Engine(private val ctx: Context) {
                 val prev = old[rel]
                 next[rel] = if (prev != null && prev.mtime == f.lastModified() && prev.size == f.length()) prev else parseFile(rel, f, habits)
             }
-            files = next; rebuild(); error = null; ready = true; bump()
+            files = next; rebuild(); error = null; ready = true; recompute(); bump()
             checkLevel()
         } catch (e: Exception) { error = "Couldn't read the vault: ${e.message}"; bump() }
     }
@@ -231,7 +231,12 @@ class Engine(private val ctx: Context) {
         val tk = today(); val all = allTasks()
         val S = computeStats(all, days, noteDays, RpgOpts(tk, prefs.bool("weekStartsMonday", false), areas(), habitList(), dash["habit_added"].asMap().mapValues { it.value.toString() },
             habitList().size, mdPaths.size, all.count { it.status == "open" && it.due != null && it.due < tk }))
-        rpg = evaluateRpg(S)
+        val raw = evaluateRpg(S)
+        // Calibrate to the dashboard: it writes its own total as rpg_xp; we carry the difference so both show the same number.
+        val dx = dash["rpg_xp"].asInt(); val at = dash["rpg_at"]?.toString() ?: ""
+        if (dx != null && ready && prefs.str("rpg_at_seen", "") != at) { prefs.put("rpg_offset", dx - raw.xp); prefs.put("rpg_at_seen", at) }
+        val off = if (dx != null) prefs.int("rpg_offset") else 0
+        rpg = if (off == 0) raw else { val xp = maxOf(0, raw.xp + off); val lv = levelFor(xp); raw.copy(xp = xp, level = lv.level, into = lv.into, need = lv.need, rank = rankFor(lv.level)) }
     }
     private fun reward(before: Rpg?, reason: String) {
         val cur = rpg ?: return
@@ -474,7 +479,11 @@ class Engine(private val ctx: Context) {
     suspend fun setRank(rel: String, rank: Double) = modify(rel) { Frontmatter.update(it) { fm -> fm["priority_rank"] = if (rank == Math.floor(rank)) rank.toLong() else rank } }
     fun mdIn(folder: String): List<File> { val d = file(folder.trim('/')); return d.listFiles()?.filter { it.isFile && it.name.endsWith(".md") }?.sortedByDescending { it.lastModified() } ?: emptyList() }
     fun filesUnder(folder: String, exts: Set<String>): List<File> { val d = file(folder.trim('/')); if (!d.isDirectory) return emptyList(); return d.walkTopDown().filter { it.isFile && exts.contains(it.extension.lowercase()) }.sortedByDescending { it.lastModified() }.toList() }
-    fun clippingFiles(): List<String> = mdPaths.filter { it.startsWith(clippings.trim('/') + "/") }
+    fun clippingFiles(): List<String> {
+        val pre = clippings.trim('/').lowercase() + "/"
+        val exact = mdPaths.filter { it.lowercase().startsWith(pre) }
+        return exact.ifEmpty { mdPaths.filter { it.lowercase().contains("clipping") } }
+    }
     fun searchNotes(q: String): List<String> { val s = q.lowercase(); return mdPaths.filter { it.substringAfterLast('/').lowercase().contains(s) }.sortedBy { it.substringAfterLast('/').length }.take(12) }
 }
 
