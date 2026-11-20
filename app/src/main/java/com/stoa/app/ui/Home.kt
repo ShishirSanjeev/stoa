@@ -14,6 +14,7 @@ import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Screenshot
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.SelfImprovement
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.clickable
@@ -59,6 +60,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -98,6 +100,7 @@ fun HomePage(nest: NestedScrollConnection, openDrawer: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 Text(time.format(DateTimeFormatter.ofPattern("HH:mm")), fontFamily = Display, fontWeight = FontWeight.ExtraLight, fontSize = 96.sp, lineHeight = 96.sp, letterSpacing = (-3).sp, color = ink.ink)
                 Text(LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE  d MMMM")).uppercase(), fontFamily = Mono, fontSize = 11.sp, letterSpacing = 1.8.sp, color = ink.mute)
+                SyncLine(Modifier.padding(top = 6.dp))
             }
             IconBtn(Icons.Outlined.Tune, "Settings & layout", { ui.settings = true })
         }
@@ -250,7 +253,7 @@ fun CaptureCard() {
 }
 
 private val QUICK_ICONS = mapOf("idea" to Icons.Outlined.Lightbulb, "task" to Icons.Outlined.AddTask, "daily" to Icons.Outlined.CalendarToday, "read" to Icons.Outlined.MenuBook,
-    "still" to Icons.Outlined.SelfImprovement, "gym" to Icons.Outlined.FitnessCenter, "canvas" to Icons.Outlined.Gesture, "shots" to Icons.Outlined.Screenshot, "search" to Icons.Outlined.Search)
+    "still" to Icons.Outlined.SelfImprovement, "gym" to Icons.Outlined.FitnessCenter, "canvas" to Icons.Outlined.Gesture, "sync" to Icons.Outlined.Sync, "shots" to Icons.Outlined.Screenshot, "search" to Icons.Outlined.Search)
 
 /** One-tap shortcuts into the parts of Stoa you use most. */
 @Composable
@@ -266,6 +269,7 @@ fun QuickRow() {
                     "daily" -> scope.launch { val rel = E.ensureDaily(); Apps.openInObsidian(ctx, E.vaultName, rel) }
                     "read" -> ui.go("reading"); "still" -> ui.go("still"); "gym" -> ui.go("gym"); "canvas" -> ui.go("canvas"); "shots" -> ui.go("shots")
                     "search" -> ui.drawerReq++
+                    "sync" -> com.stoa.app.SyncNow.start(ctx)
                 }
             }), horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(Modifier.size(54.dp).clip(CircleShape).border(1.dp, ink.line2, CircleShape), contentAlignment = Alignment.Center) {
@@ -336,3 +340,22 @@ fun ClipReader(rel: String) {
     }
 }
 private fun clean(s: String) = stripMd(s).replace(Regex("[*_`~=]{1,3}"), "").replace(Regex("<[^>]+>"), "")
+
+/** "Synced 2h ago · Sync now" — Obsidian Sync only runs inside Obsidian, so one tap opens it and comes back. */
+@Composable
+fun SyncLine(modifier: Modifier = Modifier, light: Boolean = false) {
+    val ctx = LocalContext.current; val ui = LocalUi.current; val ink = LocalInk.current
+    var tick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) { while (true) { delay(60_000); tick++ } }
+    val syncing = com.stoa.app.SyncNow.syncing
+    val last = remember(ui.resume, syncing, tick, com.stoa.app.SyncNow.lastDone) { com.stoa.app.SyncNow.lastSynced(ctx) }
+    val stale = last > 0 && System.currentTimeMillis() - last > 3_600_000L
+    val base = if (light) Color(0x99FFFFFF) else ink.mute
+    val spin = rememberInfiniteTransition(label = "spin").animateFloat(0f, 360f, infiniteRepeatable(tween(1100, easing = androidx.compose.animation.core.LinearEasing)), label = "r")
+    Row(modifier.clip(CircleShape).clickable(enabled = !syncing) { com.stoa.app.SyncNow.start(ctx) }.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Outlined.Sync, "Sync now", Modifier.size(13.dp).graphicsLayer { rotationZ = if (syncing) -spin.value else 0f }, tint = if (stale && !syncing) ink.warn else base)
+        Spacer(Modifier.width(6.dp))
+        Text((if (syncing) "SYNCING WITH OBSIDIAN…" else "SYNCED ${com.stoa.app.SyncNow.ago(last).uppercase()}  ·  SYNC NOW"),
+            fontFamily = Mono, fontSize = 10.sp, letterSpacing = 1.4.sp, color = if (stale && !syncing) ink.warn else base)
+    }
+}

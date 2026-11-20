@@ -311,6 +311,7 @@ fun Drawer(nest: NestedScrollConnection, open: Boolean, close: () -> Unit) {
         val d = E.day(); val habits = E.habitList()
         Text(now.format(DateTimeFormatter.ofPattern("HH:mm")) + "   " + LocalDate.now().format(DateTimeFormatter.ofPattern("EEE d MMM")).uppercase() + "   " +
             (E.rpg?.let { "LV ${it.level}" } ?: "") + "   " + "${habits.count { d.done.contains(it.lowercase()) }}/${habits.size} HABITS", style = mono, maxLines = 1)
+        SyncLine(Modifier.padding(top = 8.dp), light = true)
         BasicTextField(q, { q = it }, Modifier.fillMaxWidth().padding(top = 18.dp, bottom = 10.dp).focusRequester(fr),
             textStyle = TextStyle(fontFamily = Display, fontWeight = FontWeight.Light, fontSize = 34.sp, color = Color.White), singleLine = true, cursorBrush = SolidColor(Color.White),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
