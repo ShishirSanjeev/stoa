@@ -223,8 +223,8 @@ fun HomeSettings() {
 @Composable
 fun DockSettings() {
     val ui = LocalUi.current; val ctx = LocalContext.current; val ink = LocalInk.current
-    val packs = androidx.compose.runtime.remember { com.stoa.app.IconPacks.installed(ctx) }
-    fun setPack(p: String) { ui.iconPack = p; ui.prefs.put("icon_pack", p); Apps.clearIcons() }
+    val packs = androidx.compose.runtime.produceState(emptyList<com.stoa.app.IconPacks.Pack>()) { value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.stoa.app.IconPacks.installed(ctx) } }.value
+    fun setPack(p: String) = ui.applyPack(p)
     StoaCard("Dock & icons") {
         Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) { Text("Monochrome icons", color = ink.ink); Muted("Keeps the dock black and white.", size = 12) }

@@ -94,7 +94,7 @@ fun NotesPage() {
             "canvas" -> CanvasList()
             "shots" -> Shots()
             "gym" -> GymView()
-            "writing" -> Writing()
+            "writing" -> { Writing(); BookTasks(); WritingPieces() }
             else -> TasksPipeline()
         }
     }
@@ -150,6 +150,11 @@ fun Writing() {
         asking = false; val body = text
         scope.launch { E.uploadWriting(t, body); title = ""; text = ""; p.put("draft_title", ""); p.put("draft_text", "") }
     }
+}
+
+@Composable
+fun WritingPieces() {
+    val E = LocalEngine.current; val ctx = LocalContext.current; val ink = LocalInk.current
     val pre = E.writingPrefix
     val pieces = remember(E.mdPaths) { E.mdPaths.filter { it.substringAfterLast('/').startsWith(pre) }.map { it to E.file(it).lastModified() }.sortedByDescending { it.second } }
     StoaCard("Pieces", action = { Muted("${pieces.size} notes", size = 12) }) {

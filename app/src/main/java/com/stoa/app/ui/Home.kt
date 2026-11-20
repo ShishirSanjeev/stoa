@@ -1,5 +1,6 @@
 package com.stoa.app.ui
 
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -87,7 +88,7 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun Page(nest: NestedScrollConnection? = null, content: @Composable () -> Unit) {
     Column(Modifier.fillMaxSize().then(if (nest != null) Modifier.nestedScroll(nest) else Modifier).verticalScroll(rememberScrollState())
-        .statusBarsPadding().padding(horizontal = 16.dp).padding(top = 10.dp, bottom = 28.dp)) { content() }
+        .statusBarsPadding().navigationBarsPadding().padding(horizontal = 16.dp).padding(top = 10.dp, bottom = 28.dp)) { content() }
 }
 
 fun greetingFor(p: com.stoa.app.Prefs): String {
@@ -110,9 +111,8 @@ fun HomePage(nest: NestedScrollConnection) {
             Spacer(Modifier.width(4.dp))
             IconBtn(Icons.Outlined.Tune, "Settings & layout", { ui.settings = true }, size = 18.dp)
         }
-        Text(time.format(DateTimeFormatter.ofPattern("HH:mm")), fontFamily = Display, fontWeight = FontWeight.ExtraLight, fontSize = 94.sp, lineHeight = 94.sp, letterSpacing = (-3).sp, color = ink.ink)
+        Text(time.format(DateTimeFormatter.ofPattern("HH:mm")), fontFamily = Display, fontWeight = FontWeight.ExtraLight, fontSize = 72.sp, lineHeight = 76.sp, letterSpacing = (-2).sp, color = ink.ink)
         SyncLine()
-        NowPlaying()
         Spacer(Modifier.height(6.dp))
         E.error?.let { err -> StoaCard("Set up") { Muted(err, size = 14); Spacer(Modifier.height(10.dp)); Pill("Open settings", { ui.settings = true }, primary = true) } }
         for (w in ui.layout.on(ui.layout.home)) when (w) {
@@ -120,13 +120,13 @@ fun HomePage(nest: NestedScrollConnection) {
             "screen" -> UsageGraph()
             "three" -> ThreeCard()
             "search" -> SearchCard()
-            "capture" -> CaptureCard()
+            "capture" -> { CaptureCard(); NowPlaying() }
             "seren" -> SerenCard()
             "due" -> DueCard()
         }
         Spacer(Modifier.height(if (ui.dockCollapsed) 60.dp else 120.dp))
     }
-    Dock(Modifier.align(Alignment.BottomCenter).padding(bottom = 4.dp))
+    Dock(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 4.dp))
     FolderOverlay()
     }
 }

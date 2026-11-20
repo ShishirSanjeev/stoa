@@ -83,7 +83,7 @@ fun TodayPage() {
         when (s) {
             "reading" -> ReadingView()
             "still" -> StillView()
-            "writing" -> { Writing(); BookTasks() }
+            "writing" -> { Writing(); BookTasks(); WritingPieces() }
             else -> TodayView()
         }
     }

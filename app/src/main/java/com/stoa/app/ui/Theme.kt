@@ -23,7 +23,7 @@ data class Ink(
     val bg: Color, val card: Color, val ink: Color, val mute: Color, val faint: Color,
     val line: Color, val line2: Color, val inv: Color, val warn: Color, val dark: Boolean
 )
-private val DarkInk = Ink(Color(0xFF0C0C0D), Color(0xFF161617), Color(0xFFEDEDEB), Color(0xFF8D8B87), Color(0xFF55534F),
+private val DarkInk = Ink(Color(0xFF0C0C0D), Color(0xFF161617), Color(0xFFEDEDEB), Color(0xFFBDBAB4), Color(0xFF85827C),
     Color(0x14FFFFFF), Color(0x2BFFFFFF), Color(0xFF0C0C0D), Color(0xFFD9775E), true)
 private val LightInk = Ink(Color(0xFFF4F2EE), Color(0xFFFBFAF7), Color(0xFF141414), Color(0xFF75726C), Color(0xFFB4B0A8),
     Color(0x17141414), Color(0x2E141414), Color(0xFFF4F2EE), Color(0xFFC2553A), false)

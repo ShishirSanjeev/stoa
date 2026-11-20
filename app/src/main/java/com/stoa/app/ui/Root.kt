@@ -1,5 +1,11 @@
 package com.stoa.app.ui
 
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.expandVertically
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.text.font.FontWeight
 import android.content.Context
 import androidx.activity.compose.BackHandler
@@ -129,7 +135,7 @@ fun entries(ui: UiState): List<Entry> {
     val L = ui.layout
     val on = (L.on(L.tabs) + L.on(L.today) + L.on(L.notes)).toSet()
     val secs = SECTIONS.filter { on.contains(it.key) }.map { (k, v) -> Entry("sec:$k", v, if (k == "shots") "▣" else if (k == "tasks") "✓" else v.take(1)) }
-    return secs + ui.apps.filter { !ui.hidden.contains(it.pkg) }.map { Entry("app:${it.pkg}/${it.cls}", it.label, it.label.take(1).uppercase(), it) }
+    return secs + ui.apps.filter { !ui.hidden.contains(it.pkg) }.map { val k = "app:${it.pkg}/${it.cls}"; val l = ui.renames[k] ?: it.label; Entry(k, l, l.take(1).uppercase(), it) }
 }
 
 fun openEntry(ctx: Context, ui: UiState, e: Entry) {
@@ -180,7 +186,8 @@ fun Root() {
     Box(Modifier.fillMaxSize().background(ink.bg)) {
         if (ui.wpOn) WallpaperLayer()
         Column(Modifier.fillMaxSize()) {
-            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            AnimatedVisibility(pager.targetPage != 0, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) { BottomNav(tabs, pager) }
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().then(if (pager.targetPage != 0) Modifier.consumeWindowInsets(WindowInsets.statusBars) else Modifier)) {
                 val half = constraints.maxHeight / 2f
                 HorizontalPager(pager, Modifier.fillMaxSize().swipeZones(pager, half, ui), userScrollEnabled = false, beyondViewportPageCount = 1, key = { pages[it] }) { i ->
                     val p = pages[i]
@@ -197,7 +204,6 @@ fun Root() {
                     }
                 }
             }
-            AnimatedVisibility(pager.targetPage != 0, enter = fadeIn() + slideInVertically { it }, exit = fadeOut() + slideOutVertically { it }) { BottomNav(tabs, pager) }
         }
         ui.folder?.let { FolderBrowser(it) }
         ui.reader?.let { ClipReader(it) }
@@ -246,12 +252,11 @@ fun Modifier.swipeZones(main: PagerState, half: Float, ui: UiState): Modifier = 
 fun BottomNav(tabs: List<String>, pager: PagerState) {
     val ink = LocalInk.current; val scope = rememberCoroutineScope()
     val icons = mapOf("home" to Icons.Outlined.Home, "today" to Icons.Outlined.WbSunny, "almanac" to Icons.Outlined.Insights, "notes" to Icons.Outlined.EditNote, "gym" to Icons.Outlined.FitnessCenter)
-    Column(Modifier.fillMaxWidth()) {
-        Box(Modifier.fillMaxWidth().height(1.dp).background(ink.line))
-        BoxWithConstraints(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 18.dp, vertical = 4.dp)) {
+    Column(Modifier.fillMaxWidth().statusBarsPadding()) {
+        BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 2.dp)) {
             val wPx = constraints.maxWidth.toFloat() / tabs.size
             val dotPx = with(androidx.compose.ui.platform.LocalDensity.current) { 4.dp.toPx() }
-            Row(Modifier.fillMaxWidth().height(54.dp)) {
+            Row(Modifier.fillMaxWidth().height(50.dp)) {
                 tabs.forEachIndexed { i, t ->
                     val pos = (pager.currentPage + pager.currentPageOffsetFraction - 1f)
                     val near = (1f - kotlin.math.abs(pos - i)).coerceIn(0f, 1f)
@@ -264,9 +269,10 @@ fun BottomNav(tabs: List<String>, pager: PagerState) {
                     }
                 }
             }
-            Box(Modifier.offset { IntOffset(((pager.currentPage + pager.currentPageOffsetFraction - 1f).coerceIn(0f, tabs.size - 1f) * wPx + wPx / 2 - dotPx / 2).roundToInt(), (50 * density).roundToInt()) }
+            Box(Modifier.offset { IntOffset(((pager.currentPage + pager.currentPageOffsetFraction - 1f).coerceIn(0f, tabs.size - 1f) * wPx + wPx / 2 - dotPx / 2).roundToInt(), (46 * density).roundToInt()) }
                 .size(4.dp).clip(androidx.compose.foundation.shape.CircleShape).background(ink.ink))
         }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(ink.line))
     }
 }
 
@@ -330,7 +336,7 @@ fun Drawer(open: Boolean, close: () -> Unit) {
     fun go() { results.firstOrNull()?.let { launch(it) } ?: notes.firstOrNull()?.let { close(); Apps.openInObsidian(ctx, E.vaultName, it) } }
     val list = rememberLazyListState()
     val dim = Color(0x80FFFFFF); val mono = TextStyle(fontFamily = Mono, color = dim, fontSize = 11.sp, letterSpacing = 1.4.sp)
-    Column(Modifier.fillMaxSize().statusBarsPadding().imePadding().padding(horizontal = 22.dp)) {
+    Column(Modifier.fillMaxSize().padding(WindowInsets.statusBars.asPaddingValues()).imePadding().padding(horizontal = 22.dp)) {
         Box(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 14.dp), contentAlignment = Alignment.Center) { Box(Modifier.width(36.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(Color(0x40FFFFFF))) }
         val d = E.day(); val habits = E.habitList()
         Text(now.format(DateTimeFormatter.ofPattern("HH:mm")) + "   " + LocalDate.now().format(DateTimeFormatter.ofPattern("EEE d MMM")).uppercase() + "   " +
@@ -414,10 +420,13 @@ fun DrawerRow(e: Entry, modifier: Modifier, first: Boolean = false, onLong: () -
 @Composable
 fun AppMenu(e: Entry, dismiss: () -> Unit) {
     val ui = LocalUi.current; val ctx = LocalContext.current
+    var renaming by remember { mutableStateOf(false) }
+    if (renaming) { AskDialog("Rename ${e.app?.label ?: e.label}", listOf("Name (blank = original)" to e.label), "Save", { renaming = false; dismiss() }) { v -> ui.rename(e.key, v[0]); renaming = false; dismiss() }; return }
     Sheet(e.label, dismiss) {
         val docked = ui.dockHas(e.key)
         MenuItem(if (docked) "Remove from dock" else "Add to dock") { if (docked) ui.dockRemove(e.key) else ui.dockAdd(e.key); dismiss() }
         ui.dock.filter { it.isFolder }.forEach { f -> if (!f.apps.contains(e.key)) MenuItem("Add to folder “${f.name}”") { ui.dockAddToFolder(f.id, e.key); dismiss() } }
+        MenuItem("Rename") { renaming = true }
         e.app?.let { a ->
             val m = ui.mindful.contains(a.pkg)
             MenuItem(if (m) "Stop pausing before ${a.label}" else "Pause & breathe before ${a.label}") { ui.updateMindful(if (m) ui.mindful - a.pkg else ui.mindful + a.pkg); dismiss() }

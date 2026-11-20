@@ -137,11 +137,25 @@ object Apps {
 object IconPacks {
     data class Pack(val pkg: String, val label: String)
     private var loaded = ""; private val map = HashMap<String, String>()
+    /** Packs that announce themselves to launchers, plus any app that simply ships an appfilter. */
     fun installed(ctx: Context): List<Pack> {
         val pm = ctx.packageManager
-        return listOf("org.adw.launcher.THEMES", "com.novalauncher.THEME", "com.gau.go.launcherex.theme", "com.teslacoilsw.launcher.THEME")
-            .flatMap { pm.queryIntentActivities(Intent(it), 0) }.map { it.activityInfo.packageName }.distinct()
-            .map { Pack(it, try { pm.getApplicationLabel(pm.getApplicationInfo(it, 0)).toString() } catch (e: Exception) { it }) }.sortedBy { it.label.lowercase() }
+        val acts = listOf("org.adw.launcher.THEMES", "com.novalauncher.THEME", "com.gau.go.launcherex.theme", "com.teslacoilsw.launcher.THEME",
+            "com.fede.launcher.THEME_ICONPACK", "com.anddoes.launcher.THEME", "com.dlto.atom.launcher.THEME", "com.lge.launcher2.THEME", "net.oneplus.launcher.icons.ACTION_PICK_ICON")
+        val found = LinkedHashSet<String>()
+        for (a in acts) try { pm.queryIntentActivities(Intent(a), PackageManager.GET_META_DATA).forEach { found.add(it.activityInfo.packageName) } } catch (e: Exception) { }
+        for (c in listOf("com.anddoes.launcher.THEME", "com.fede.launcher.THEME_ICONPACK")) try { pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(c), 0).forEach { found.add(it.activityInfo.packageName) } } catch (e: Exception) { }
+        // fallback: any installed app with an appfilter.xml
+        try {
+            pm.getInstalledApplications(0).forEach { ai ->
+                if (ai.packageName in found || (ai.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0) return@forEach
+                try {
+                    val res = pm.getResourcesForApplication(ai)
+                    if (res.getIdentifier("appfilter", "xml", ai.packageName) != 0 || res.assets.list("")?.contains("appfilter.xml") == true) found.add(ai.packageName)
+                } catch (e: Exception) { }
+            }
+        } catch (e: Exception) { }
+        return found.filter { it != ctx.packageName }.map { Pack(it, try { pm.getApplicationLabel(pm.getApplicationInfo(it, 0)).toString() } catch (e: Exception) { it }) }.sortedBy { it.label.lowercase() }
     }
     @Synchronized private fun load(ctx: Context, pack: String) {
         if (loaded == pack) return

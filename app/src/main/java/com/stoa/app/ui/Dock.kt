@@ -96,14 +96,14 @@ fun Glass(shape: Shape, modifier: Modifier = Modifier) {
                 val w = (bmp.width * sc).roundToInt(); val h = (bmp.height * sc).roundToInt()
                 drawImage(bmp, dstOffset = IntOffset(((root.width - w) / 2f - pos.x).roundToInt(), ((root.height - h) / 2f - pos.y).roundToInt()), dstSize = IntSize(w, h))
             }
-            Box(Modifier.fillMaxSize().background(if (ink.dark) Color(0x33FFFFFF) else Color(0x66FFFFFF)))
-        } else Box(Modifier.fillMaxSize().background(if (ink.dark) Color(0xCC1C1C1E) else Color(0xCCF7F6F3)))
-        Box(Modifier.fillMaxSize().border(1.dp, if (ink.dark) Color(0x24FFFFFF) else Color(0x14000000), shape))
+            Box(Modifier.fillMaxSize().background(if (ink.dark) Color(0x8C0A0A0B) else Color(0x59FFFFFF)))
+        } else Box(Modifier.fillMaxSize().background(if (ink.dark) Color(0xB3141415) else Color(0xCCF7F6F3)))
+        Box(Modifier.fillMaxSize().border(1.dp, if (ink.dark) Color(0x12FFFFFF) else Color(0x14000000), shape))
     }
 }
 
 fun appFor(ui: UiState, key: String): LApp? = if (key.startsWith("app:")) key.removePrefix("app:").let { k -> ui.apps.firstOrNull { it.pkg + "/" + it.cls == k } ?: ui.apps.firstOrNull { it.pkg == k.substringBefore('/') } } else null
-fun labelFor(ui: UiState, key: String): String = appFor(ui, key)?.label ?: SECTIONS[key.removePrefix("sec:")] ?: key.substringAfterLast('/').substringAfterLast('.')
+fun labelFor(ui: UiState, key: String): String = ui.renames[key] ?: appFor(ui, key)?.label ?: SECTIONS[key.removePrefix("sec:")] ?: key.substringAfterLast('/').substringAfterLast('.')
 
 @Composable
 fun AppIcon(key: String, size: Dp) {
@@ -152,7 +152,7 @@ fun Dock(modifier: Modifier = Modifier) {
             var dragging by remember { mutableStateOf(-1) }; var dragX by remember { mutableFloatStateOf(0f) }
             val pos = if (dragging >= 0) dragging + dragX / slotPx else -1f
             val to = if (dragging >= 0) pos.roundToInt().coerceIn(0, items.size - 1) else -1
-            val merging = dragging >= 0 && to != dragging && abs(pos - to) < .22f
+            val merging = dragging >= 0 && to != dragging && abs(pos - to) < .38f
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 // grabber: tap or swipe down to tuck the dock away
                 Box(Modifier.width(60.dp).height(16.dp).pointerInput(Unit) { detectVerticalDragGestures { _, dy -> if (dy > 6) ui.setCollapsed(true) } }
@@ -198,12 +198,13 @@ fun Dock(modifier: Modifier = Modifier) {
                                         val p = idx + dragX / slotPx; val t = p.roundToInt().coerceIn(0, ui.dock.size - 1)
                                         when {
                                             abs(dragX) < 12f -> menuFor = it
-                                            t != idx && abs(p - t) < .22f -> { haptic.performHapticFeedback(HapticFeedbackType.LongPress); ui.dockMerge(idx, t) }
+                                            t != idx && abs(p - t) < .38f -> { haptic.performHapticFeedback(HapticFeedbackType.LongPress); ui.dockMerge(idx, t) }
                                             t != idx -> ui.dockMove(idx, t)
                                         }
                                         dragging = -1; dragX = 0f
                                     }
                                 }, contentAlignment = Alignment.Center) {
+                                if (merging && i == to) Box(Modifier.size(iconSize + 10.dp).clip(RoundedCornerShape((iconSize + 10.dp) * .3f)).background(if (ink.dark) Color(0x33FFFFFF) else Color(0x22000000)))
                                 if (it.isFolder) FolderIcon(it, iconSize) else AppIcon(it.key, iconSize)
                             }
                         }
@@ -224,19 +225,66 @@ fun openEntryKey(ctx: android.content.Context, ui: UiState, key: String) {
 @Composable
 private fun DockMenu(d: DockItem, dismiss: () -> Unit) {
     val ui = LocalUi.current
+    var mode by remember { mutableStateOf("") }   // "", "folder", "add", "pack", "rename"
+    val idx = ui.dock.indexOfFirst { it.id == d.id }
+    fun move(by: Int) { val t = (idx + by).coerceIn(0, ui.dock.size - 1); if (t != idx) ui.dockMove(idx, t) }
+    when (mode) {
+        "pack" -> { IconPackSheet { mode = ""; dismiss() }; return }
+        "rename" -> { AskDialog("Rename", listOf("Name" to if (d.isFolder) d.name else labelFor(ui, d.key)), "Save", { mode = "" }) { v -> if (d.isFolder) ui.dockRename(d.id, v[0]) else ui.rename(d.key, v[0]); dismiss() }; return }
+        "folder" -> {
+            Sheet("Make a folder with…", { mode = "" }) {
+                ui.dock.filter { it.id != d.id }.forEach { o -> MenuItem(if (o.isFolder) "📁 " + o.name.ifBlank { "Folder" } else labelFor(ui, o.key)) {
+                    val from = ui.dock.indexOfFirst { it.id == d.id }; val onto = ui.dock.indexOfFirst { it.id == o.id }
+                    if (from >= 0 && onto >= 0) ui.dockMerge(from, onto); dismiss()
+                } }
+            }
+            return
+        }
+        "add" -> {
+            var q by remember { mutableStateOf("") }
+            Sheet("Add to “${d.name.ifBlank { "Folder" }}”", { mode = "" }) {
+                Field(q, { q = it }, "Search apps")
+                ui.apps.filter { q.isBlank() || it.label.contains(q, true) }.take(40).forEach { a ->
+                    val k = "app:${a.pkg}/${a.cls}"
+                    if (!d.apps.contains(k)) MenuItem(ui.renames[k] ?: a.label) { ui.dockAddToFolder(d.id, k); dismiss() }
+                }
+            }
+            return
+        }
+    }
     Sheet(if (d.isFolder) d.name.ifBlank { "Folder" } else labelFor(ui, d.key), dismiss) {
         if (d.isFolder) {
-            var name by remember { mutableStateOf(d.name) }
-            Field(name, { name = it; ui.dockRename(d.id, it) }, "Folder name")
-            Spacer(Modifier.height(8.dp))
             MenuItem("Open folder") { ui.openFolder = d.id; dismiss() }
-            MenuItem("Take apps out of the folder") { val i = ui.dock.indexOfFirst { it.id == d.id }; val l = ui.dock.toMutableList(); l.removeAt(i); l.addAll(i, d.apps.map { DockItem(java.util.UUID.randomUUID().toString().take(8), it) }); ui.saveDock(l); dismiss() }
+            MenuItem("Add an app…") { mode = "add" }
+            MenuItem("Rename folder") { mode = "rename" }
+            MenuItem("Take apps out of the folder") { val l = ui.dock.toMutableList(); l.removeAt(idx); l.addAll(idx, d.apps.map { DockItem(java.util.UUID.randomUUID().toString().take(8), it) }); ui.saveDock(l); dismiss() }
             MenuItem("Remove folder from dock") { ui.saveDock(ui.dock.filter { it.id != d.id }); dismiss() }
         } else {
-            MenuItem("Remove from dock") { ui.dockRemove(d.key); dismiss() }
+            if (ui.dock.size > 1) MenuItem("Make a folder with…") { mode = "folder" }
             ui.dock.filter { it.isFolder }.forEach { f -> MenuItem("Move into “${f.name.ifBlank { "Folder" }}”") { ui.dockAddToFolder(f.id, d.key); dismiss() } }
+            MenuItem("Rename") { mode = "rename" }
+            MenuItem("Remove from dock") { ui.dockRemove(d.key); dismiss() }
         }
-        Muted("Long-press and drag to re-order. Drop an icon onto another to make a folder.", Modifier.padding(top = 10.dp), 12)
+        if (idx > 0) MenuItem("← Move left") { move(-1); dismiss() }
+        if (idx < ui.dock.size - 1) MenuItem("Move right →") { move(1); dismiss() }
+        MenuItem("Icon pack…") { mode = "pack" }
+        Muted("Tip: hold an icon, then drag. Drop it on another icon to make a folder.", Modifier.padding(top = 10.dp), 12)
+    }
+}
+
+/** Choose an icon pack (any Nova / ADW-compatible pack, or anything that ships an appfilter). */
+@Composable
+fun IconPackSheet(dismiss: () -> Unit) {
+    val ui = LocalUi.current; val ctx = LocalContext.current
+    val packs = produceState<List<com.stoa.app.IconPacks.Pack>?>(null) { value = withContext(Dispatchers.IO) { com.stoa.app.IconPacks.installed(ctx) } }.value
+    Sheet("Icon pack", dismiss) {
+        MenuItem((if (ui.iconPack.isEmpty()) "● " else "○ ") + "System icons") { ui.applyPack(""); dismiss() }
+        when {
+            packs == null -> Muted("Looking for icon packs…", Modifier.padding(vertical = 10.dp), 13)
+            packs.isEmpty() -> Muted("No icon packs found. Install one from the Play Store (any pack that works with Nova Launcher), then come back.", Modifier.padding(vertical = 10.dp), 13)
+            else -> packs.forEach { p -> MenuItem((if (ui.iconPack == p.pkg) "● " else "○ ") + p.label) { ui.applyPack(p.pkg); dismiss() } }
+        }
+        Muted("Picking a pack turns monochrome icons off — switch it back in Settings → Dock & icons.", Modifier.padding(top = 10.dp), 11)
     }
 }
 

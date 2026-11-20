@@ -1,5 +1,6 @@
 package com.stoa.app.ui
 
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -50,11 +51,11 @@ fun SubPaged(title: String, kicker: String?, key: String, subs: List<Pair<String
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         Column(Modifier.padding(horizontal = 16.dp).padding(top = 10.dp)) {
             H1(title); if (kicker != null) Kicker(kicker)
-            if (subs.size > 1) SegPager(subs, pager) { i -> scope.launch { pager.animateScrollToPage(i) } }
         }
-        HorizontalPager(pager, Modifier.fillMaxSize(), userScrollEnabled = false, key = { subs[it].first }) { i ->
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 28.dp)) { content(subs[i].first) }
+        HorizontalPager(pager, Modifier.fillMaxWidth().weight(1f), userScrollEnabled = false, key = { subs[it].first }) { i ->
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 6.dp, bottom = 28.dp)) { content(subs[i].first) }
         }
+        if (subs.size > 1) Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp)) { SegPager(subs, pager) { i -> scope.launch { pager.animateScrollToPage(i) } } }
     }
 }
 
@@ -62,19 +63,19 @@ fun SubPaged(title: String, kicker: String?, key: String, subs: List<Pair<String
 @Composable
 fun SegPager(items: List<Pair<String, String>>, pager: PagerState, onPick: (Int) -> Unit) {
     val ink = LocalInk.current
-    BoxWithConstraints(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 4.dp)) {
+    BoxWithConstraints(Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 2.dp)) {
         val w = maxWidth / items.size.coerceAtLeast(1)
         val pos = pager.currentPage + pager.currentPageOffsetFraction
         Column {
-            Row(Modifier.fillMaxWidth().height(38.dp)) {
+            Box(Modifier.fillMaxWidth().height(1.dp).background(ink.line)) { Box(Modifier.offset(x = w * pos + w * .2f).width(w * .6f).height(1.dp).background(ink.ink)) }
+            Row(Modifier.fillMaxWidth().height(44.dp)) {
                 items.forEachIndexed { i, (_, label) ->
                     val near = (1f - kotlin.math.abs(pos - i)).coerceIn(0f, 1f)
-                    Box(Modifier.weight(1f).fillMaxHeight().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onPick(i) }, contentAlignment = Alignment.CenterStart) {
+                    Box(Modifier.weight(1f).fillMaxHeight().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onPick(i) }, contentAlignment = Alignment.Center) {
                         Text(label.uppercase(), color = lerp(ink.faint, ink.ink, near), fontSize = 10.5.sp, letterSpacing = 1.4.sp, fontFamily = Mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }
-            Box(Modifier.fillMaxWidth().height(1.dp).background(ink.line)) { Box(Modifier.offset(x = w * pos).width(w * .6f).height(1.dp).background(ink.ink)) }
         }
     }
 }

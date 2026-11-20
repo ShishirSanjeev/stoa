@@ -90,6 +90,9 @@ class UiState(val prefs: Prefs) {
     var dockCollapsed by mutableStateOf(prefs.bool("dock_collapsed", false))
     var dock by mutableStateOf(loadDock())
     var openFolder by mutableStateOf<String?>(null)
+    var renames by mutableStateOf(prefs.json("renames")?.let { j -> j.keys().asSequence().associateWith { j.optString(it) } } ?: emptyMap())
+    fun rename(key: String, name: String) { renames = if (name.isBlank()) renames - key else renames + (key to name.trim()); prefs.put("renames", JSONObject(renames as Map<*, *>).toString()) }
+    fun applyPack(p: String) { prefs.put("icon_pack", p); com.stoa.app.Apps.clearIcons(); iconPack = p; if (p.isNotEmpty() && greyIcons) { greyIcons = false; prefs.put("grey_icons", false) } }
     /** Last-opened apps and how often each was opened from a search, for the top of the drawer. */
     var recent by mutableStateOf(prefs.jsonArr("recent_apps")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList())
     var searched by mutableStateOf(prefs.json("searched_apps")?.let { j -> j.keys().asSequence().associateWith { j.optInt(it) } } ?: emptyMap())
