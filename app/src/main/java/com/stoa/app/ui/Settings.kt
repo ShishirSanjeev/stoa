@@ -72,6 +72,7 @@ fun SettingsScreen() {
     var path by remember { mutableStateOf(p.vaultPath) }
     var ver by remember { mutableIntStateOf(0) }
     val r = ui.resume + ver
+    val notifAsk = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ver++ }
     val tree = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri -> uri?.let { treeToPath(it) }?.let { path = it; p.vaultPath = it; E.scan(true); ver++ } }
     Box(Modifier.fillMaxSize().background(ink.bg)) {
         Page {
@@ -79,17 +80,24 @@ fun SettingsScreen() {
             Spacer(Modifier.height(8.dp))
             StoaCard("Set up") {
                 val all = remember(r) { Apps.hasAllFiles(ctx) }; val home = remember(r) { Apps.isDefaultHome(ctx) }
-                val acc = remember(r) { Apps.hasAccessibility(ctx) }; val use = remember(r) { Apps.hasUsage(ctx) }; val img = remember(r) { hasImages(ctx) }
+                val ovl = remember(r) { Apps.hasOverlay(ctx) }; val notif = remember(r) { Apps.hasNotifications(ctx) }; val use = remember(r) { Apps.hasUsage(ctx) }; val img = remember(r) { hasImages(ctx) }
                 SetupRow("1. All-files access", "So Stoa can read and write your vault's notes.", all) { Apps.askAllFiles(ctx) }
                 SetupRow("2. Your vault", if (E.root != null) path else "Pick the folder Obsidian syncs your vault into.", E.root != null) { tree.launch(null) }
                 if (E.root == null && all) { val found = remember(r) { findVaults() }; found.forEach { f -> Pill("Use ${f.name}", { path = f.absolutePath; p.vaultPath = path; E.scan(true); ver++ }, Modifier.padding(bottom = 6.dp), small = true) } }
                 SetupRow("3. Make Stoa your home screen", "Press Home and you land here.", home) { Apps.askHome(ctx) }
-                SetupRow("4. Mindful pause", "Turn on “Stoa mindful pause” in Accessibility so the breathing screen catches apps however they're opened.", acc) { Apps.askAccessibility(ctx) }
-                SetupRow("5. Usage access", "For today's screen time on Home.", use) { Apps.askUsage(ctx) }
+                SetupRow("4. Usage access", "For the screen-time graph and to notice when a mindful app opens.", use) { Apps.askUsage(ctx) }
+                SetupRow("5. Display over other apps", "Lets the breathing pause appear over Instagram & co. (No Accessibility needed, so GPay and banking apps are happy.)", ovl) { Apps.askOverlay(ctx) }
+                SetupRow("7. Notifications", "For task reminders, and the quiet “mindful pause is on” notice.", notif) { if (android.os.Build.VERSION.SDK_INT >= 33) notifAsk.launch(android.Manifest.permission.POST_NOTIFICATIONS) }
+                Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) { Text("Mindful pause", color = ink.ink, fontWeight = FontWeight.Medium); Muted(if (com.stoa.app.Watch.running) "On — watching for the apps you chose." else if (use && ovl) "Off" else "Needs steps 4 and 5.", size = 12) }
+                    Toggle(p.bool("watch_on", true) && use && ovl) { v -> p.put("watch_on", v); com.stoa.app.Watch.sync(ctx); ver++ }
+                }
+                Divider()
                 SetupRow("6. Photos", "For Notes → Screenshots. You'll be asked the first time you open it.", img) { ui.settings = false; ui.go("shots") }
                 if (E.error != null) Muted(E.error ?: "", Modifier.padding(top = 8.dp), 13)
                 else if (E.ready) Muted("Reading ${E.mdPaths.size} notes from ${E.vaultName}.", Modifier.padding(top = 8.dp), 12)
             }
+            HomeSettings()
             WallpaperSettings()
             LayoutEditor()
             MindfulEditor()
@@ -191,6 +199,22 @@ fun WallpaperSettings() {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Kicker("Dim", Modifier.weight(1f)); Kicker("${ui.wpDim}%") }
             androidx.compose.material3.Slider(ui.wpDim.toFloat(), { ui.setWallpaper(dim = it.toInt()) }, valueRange = 0f..95f, colors = colors)
             Muted("Blur needs Android 12 or newer. If the wallpaper doesn't show, make sure All-files access is on.", size = 11)
+        }
+    }
+}
+
+@Composable
+fun HomeSettings() {
+    val ui = LocalUi.current; val p = ui.prefs
+    StoaCard("Home") {
+        var name by remember { mutableStateOf(ui.homeName) }
+        Kicker("Name of your home space", Modifier.padding(top = 4.dp, bottom = 2.dp))
+        Field(name, { name = it; ui.homeName = it.ifBlank { "Atrium" }; p.put("home_name", it) }, "Atrium")
+        listOf("greet_morning" to ("Morning greeting" to "Good morning"), "greet_afternoon" to ("Afternoon greeting" to "Good afternoon"),
+            "greet_evening" to ("Evening greeting" to "Good evening"), "greet_night" to ("Late-night greeting" to "Quiet night")).forEach { (k, lv) ->
+            var v by remember { mutableStateOf(p.str(k, lv.second)) }
+            Kicker(lv.first, Modifier.padding(top = 12.dp, bottom = 2.dp))
+            Field(v, { v = it; p.put(k, it) }, lv.second)
         }
     }
 }

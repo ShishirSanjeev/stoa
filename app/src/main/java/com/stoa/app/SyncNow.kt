@@ -74,7 +74,7 @@ object SyncNow {
                 val now = System.currentTimeMillis(); lastDone = now; Prefs(ctx).put("last_sync", now)
                 E.toast("Synced", if (changed == 0) "Everything was up to date" else "$changed note${if (changed == 1) "" else "s"} updated", "ach")
                 E.scan()
-                // come back to Stoa (allowed because the mindful-pause accessibility service is bound; otherwise Home does it)
+                // come back to Stoa (allowed with “Display over other apps”; otherwise Home does it)
                 try { ctx.startActivity(Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)) } catch (e: Exception) { }
             } finally { syncing = false }
         }

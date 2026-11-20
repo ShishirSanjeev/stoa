@@ -87,21 +87,15 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun NotesPage() {
     val ui = LocalUi.current
-    val subs = ui.layout.on(ui.layout.notes).ifEmpty { listOf("writing") }
-    if (!subs.contains(ui.notesSub)) ui.notesSub = subs.first()
-    Page {
-        H1("Notes")
-        if (subs.size > 1) Seg(subs.map { it to (when (it) { "tasks" -> "Tasks"; "shots" -> "Shots"; else -> SECTIONS[it] ?: it }) }, ui.notesSub, { ui.notesSub = it })
-        AnimatedContent(ui.notesSub, label = "notesSub", transitionSpec = { (fadeIn(tween(220)) + slideInVertically(tween(300, easing = FastOutSlowInEasing)) { it / 30 }) togetherWith fadeOut(tween(90)) }) { s ->
-            Column {
-                when (s) {
-                    "tasks" -> BookTasks()
-                    "ideas" -> Ideas()
-                    "canvas" -> CanvasList()
-                    "shots" -> Shots()
-                    else -> Writing()
-                }
-            }
+    val subs = ui.layout.on(ui.layout.notes).ifEmpty { listOf("tasks") }
+    SubPaged("Notes", null, "notes", subs.map { it to (when (it) { "tasks" -> "Tasks"; "shots" -> "Shots"; else -> SECTIONS[it] ?: it }) }, ui.notesSub, { ui.notesSub = it }) { s ->
+        when (s) {
+            "ideas" -> Ideas()
+            "canvas" -> CanvasList()
+            "shots" -> Shots()
+            "gym" -> GymView()
+            "writing" -> Writing()
+            else -> BookTasks()
         }
     }
 }

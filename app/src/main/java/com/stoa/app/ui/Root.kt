@@ -42,6 +42,18 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.horizontalDrag
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material.icons.outlined.Insights
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.composed
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.imePadding
@@ -124,91 +136,67 @@ fun openEntry(ctx: Context, ui: UiState, e: Entry) {
     val a = e.app
     if (a == null) { ui.go(e.key.removePrefix("sec:")); ui.homeTick++; return }
     val prefs = ui.prefs
-    if (ui.mindful.contains(a.pkg) && prefs.passUntil(a.pkg) < System.currentTimeMillis() && !Apps.hasAccessibility(ctx)) { ui.pauseFor = a; return }
+    if (ui.mindful.contains(a.pkg) && prefs.passUntil(a.pkg) < System.currentTimeMillis() && !com.stoa.app.Watch.running) { ui.pauseFor = a; return }
     Apps.launch(ctx, a)
 }
 
+/** Pages sit side by side: the app drawer (hidden, to the left of Home), then your tabs. */
 @Composable
 fun Root() {
-    val ui = LocalUi.current; val ink = LocalInk.current; val E = LocalEngine.current
+    val ui = LocalUi.current; val ink = LocalInk.current; val E = LocalEngine.current; val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    BoxWithConstraints(Modifier.fillMaxSize().background(ink.bg)) {
+    val tabs = ui.layout.on(ui.layout.tabs).ifEmpty { listOf("home") }
+    val pages = listOf("drawer") + tabs
+    if (!tabs.contains(ui.tab) && ui.tab != "drawer") ui.tab = tabs.first()
+    val pager = rememberPagerState(initialPage = pages.indexOf("home").coerceAtLeast(1)) { pages.size }
+    // keep ui.tab and the pager in step both ways
+    LaunchedEffect(pager) { snapshotFlow { pager.settledPage }.collect { i -> pages.getOrNull(i)?.let { if (ui.tab != it) ui.tab = it } } }
+    LaunchedEffect(ui.tab, pages) { val i = pages.indexOf(ui.tab); if (i >= 0 && i != pager.currentPage && !pager.isScrollInProgress) pager.animateScrollToPage(i, animationSpec = spring(dampingRatio = .9f, stiffness = 280f)) }
+    LaunchedEffect(ui.homeTick) { if (ui.homeTick > 0) { ui.tab = "home"; pager.animateScrollToPage(pages.indexOf("home").coerceAtLeast(0)) } }
+    LaunchedEffect(ui.drawerReq) { if (ui.drawerReq > 0) { ui.tab = "drawer"; pager.animateScrollToPage(0) } }
+    BackHandler(true) {
+        when {
+            ui.folder != null -> ui.folder = null
+            ui.reader != null -> ui.reader = null
+            ui.canvas != null -> ui.canvas = null
+            ui.viewer != null -> ui.viewer = null
+            ui.pauseFor != null -> ui.pauseFor = null
+            ui.settings -> ui.settings = false
+            ui.tab != "home" -> ui.tab = "home"
+        }
+    }
+    // pull down on Home → notification shade
+    val homeNest = remember {
+        object : NestedScrollConnection {
+            var pulled = 0f; var fired = false
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                if (available.y > 0 && source == NestedScrollSource.UserInput) { pulled += available.y; if (!fired && pulled > 140f) { fired = true; Apps.expandNotifications(ctx) } }
+                return Offset.Zero
+            }
+            override suspend fun onPreFling(available: Velocity): Velocity { pulled = 0f; fired = false; return Velocity.Zero }
+        }
+    }
+    Box(Modifier.fillMaxSize().background(ink.bg)) {
         if (ui.wpOn) WallpaperLayer()
-        val H = constraints.maxHeight.toFloat().coerceAtLeast(1f)
-        // drawer position as a fraction (0 = open, 1 = closed) so the keyboard resizing the screen never moves it
-        var frac by remember { mutableFloatStateOf(1f) }
-        var job by remember { mutableStateOf<Job?>(null) }
-        fun settle(target: Float, v: Float = 0f) {
-            job?.cancel()
-            job = scope.launch { animate(frac, target, v / H, spring(dampingRatio = .86f, stiffness = 330f)) { x, _ -> frac = x } }
-        }
-        fun moveBy(px: Float): Float { val n = (frac + px / H).coerceIn(0f, 1f); val used = (n - frac) * H; frac = n; return used }
-        val drawerOpen = frac < .999f
-        LaunchedEffect(ui.drawerReq) { if (ui.drawerReq > 0) settle(0f) }
-        LaunchedEffect(ui.homeTick) { if (ui.homeTick > 0) settle(1f) }
-        BackHandler(true) {
-            when {
-                ui.folder != null -> ui.folder = null
-                ui.reader != null -> ui.reader = null
-                ui.canvas != null -> ui.canvas = null
-                ui.viewer != null -> ui.viewer = null
-                ui.pauseFor != null -> ui.pauseFor = null
-                ui.settings -> ui.settings = false
-                drawerOpen -> settle(1f)
-                ui.tab != "home" -> ui.tab = "home"
-            }
-        }
-        val homeNest = remember(H) {
-            object : NestedScrollConnection {
-                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                    if (frac < 1f && available.y > 0 && source == NestedScrollSource.UserInput) { job?.cancel(); return Offset(0f, moveBy(available.y)) }
-                    return Offset.Zero
-                }
-                override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-                    if (available.y < 0 && source == NestedScrollSource.UserInput) { job?.cancel(); return Offset(0f, moveBy(available.y)) }
-                    return Offset.Zero
-                }
-                override suspend fun onPreFling(available: Velocity): Velocity {
-                    if (frac < .999f && frac > 0f) { settle(if (available.y < -700f || (available.y <= 700f && frac < .72f)) 0f else 1f, available.y); return available }
-                    return Velocity.Zero
-                }
-            }
-        }
-        val drawerNest = remember(H) {
-            object : NestedScrollConnection {
-                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                    if (frac > 0f && available.y < 0 && source == NestedScrollSource.UserInput) { job?.cancel(); return Offset(0f, moveBy(available.y)) }
-                    return Offset.Zero
-                }
-                override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-                    if (available.y > 0 && source == NestedScrollSource.UserInput) { job?.cancel(); return Offset(0f, moveBy(available.y)) }
-                    return Offset.Zero
-                }
-                override suspend fun onPreFling(available: Velocity): Velocity {
-                    if (frac > 0f && frac < 1f) { settle(if (available.y > 700f || (available.y >= -700f && frac > .22f)) 1f else 0f, available.y); return available }
-                    return Velocity.Zero
-                }
-            }
-        }
-
-        val tabs = ui.layout.on(ui.layout.tabs).ifEmpty { listOf("home") }
-        if (!tabs.contains(ui.tab)) ui.tab = tabs.first()
         Column(Modifier.fillMaxSize()) {
-            AnimatedContent(ui.tab, Modifier.weight(1f), label = "tabs", transitionSpec = {
-                val dir = if (tabs.indexOf(targetState) >= tabs.indexOf(initialState)) 1 else -1
-                (fadeIn(tween(220, 60)) + slideInHorizontally(tween(340, easing = FastOutSlowInEasing)) { dir * it / 10 }) togetherWith fadeOut(tween(110))
-            }) { t ->
-                when (t) {
-                    "today" -> TodayPage()
-                    "notes" -> NotesPage()
-                    "gym" -> GymPage()
-                    else -> HomePage(homeNest) { settle(0f) }
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+                val half = constraints.maxHeight / 2f
+                HorizontalPager(pager, Modifier.fillMaxSize().swipeZones(pager, half, ui), userScrollEnabled = false, beyondViewportPageCount = 1, key = { pages[it] }) { i ->
+                    val p = pages[i]
+                    // a gentle depth effect while paging
+                    val off = (pager.currentPage - i) + pager.currentPageOffsetFraction
+                    Box(Modifier.fillMaxSize().graphicsLayer { val f = kotlin.math.abs(off).coerceIn(0f, 1f); alpha = 1f - f * .35f; scaleX = 1f - f * .04f; scaleY = 1f - f * .04f }) {
+                        when (p) {
+                            "drawer" -> Box(Modifier.fillMaxSize().background(Color.Black)) { Drawer(pager.targetPage == 0) { ui.tab = "home" } }
+                            "today" -> TodayPage()
+                            "almanac" -> AlmanacPage()
+                            "notes" -> NotesPage()
+                            else -> HomePage(homeNest)
+                        }
+                    }
                 }
             }
-            BottomNav(tabs)
-        }
-        if (frac < 1f) Box(Modifier.fillMaxSize().offset { IntOffset(0, (frac * H).roundToInt()) }.clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)).background(Color.Black)) {
-            Drawer(drawerNest, frac < .5f) { settle(1f) }
+            AnimatedVisibility(pager.targetPage != 0, enter = fadeIn() + slideInVertically { it }, exit = fadeOut() + slideOutVertically { it }) { BottomNav(tabs) }
         }
         ui.folder?.let { FolderBrowser(it) }
         ui.reader?.let { ClipReader(it) }
@@ -217,7 +205,6 @@ fun Root() {
         ui.viewer?.let { ShotViewer(it) }
         if (ui.settings) SettingsScreen()
         ui.pauseFor?.let { a ->
-            val ctx = LocalContext.current
             Box(Modifier.fillMaxSize().background(ink.bg)) {
                 PauseScreen(a.label, ui.prefs.resisted(LocalDate.now().toString()),
                     onBack = { ui.prefs.addResisted(LocalDate.now().toString()); ui.pauseFor = null; E.toast("Good call.", "Urge resisted", "ach") },
@@ -229,11 +216,34 @@ fun Root() {
     }
 }
 
+/**
+ * Horizontal swipes: on the top half they flip a page's sub-pages (Today, Notes), on the bottom half they move
+ * between pages. The pager follows your finger and settles with a spring.
+ */
+fun Modifier.swipeZones(main: PagerState, half: Float, ui: UiState): Modifier = composed {
+    val scope = rememberCoroutineScope()
+    pointerInput(main, half) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            val sub = if (down.position.y < half) ui.subPagers[ui.tab] else null
+            val target = sub ?: main
+            var over = 0f
+            val drag = awaitHorizontalTouchSlopOrCancellation(down.id) { ch, o -> ch.consume(); over = o } ?: return@awaitEachGesture
+            val vt = VelocityTracker(); vt.addPosition(drag.uptimeMillis, drag.position)
+            target.dispatchRawDelta(-over)
+            horizontalDrag(drag.id) { ch -> vt.addPosition(ch.uptimeMillis, ch.position); target.dispatchRawDelta(-ch.positionChange().x); ch.consume() }
+            val v = vt.calculateVelocity().x
+            val pos = target.currentPage + target.currentPageOffsetFraction
+            val to = (when { v < -500f -> kotlin.math.floor(pos).toInt() + 1; v > 500f -> kotlin.math.ceil(pos).toInt() - 1; else -> kotlin.math.round(pos).toInt() }).coerceIn(0, target.pageCount - 1)
+            scope.launch { target.animateScrollToPage(to, animationSpec = spring(dampingRatio = .86f, stiffness = 300f)) }
+        }
+    }
+}
 
 @Composable
 fun BottomNav(tabs: List<String>) {
     val ui = LocalUi.current; val ink = LocalInk.current
-    val icons = mapOf("home" to Icons.Outlined.Home, "today" to Icons.Outlined.WbSunny, "notes" to Icons.Outlined.EditNote, "gym" to Icons.Outlined.FitnessCenter)
+    val icons = mapOf("home" to Icons.Outlined.Home, "today" to Icons.Outlined.WbSunny, "almanac" to Icons.Outlined.Insights, "notes" to Icons.Outlined.EditNote, "gym" to Icons.Outlined.FitnessCenter)
     Column(Modifier.fillMaxWidth().background(if (ui.wpOn) Color.Transparent else ink.bg)) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(ink.line))
         BoxWithConstraints(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 18.dp, vertical = 4.dp)) {
@@ -293,7 +303,7 @@ fun matchScore(label: String, q: String): Int? {
 /** Swipe-up drawer: every app in one quiet alphabetical list, keyboard already up, Enter opens the best match. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun Drawer(nest: NestedScrollConnection, open: Boolean, close: () -> Unit) {
+fun Drawer(open: Boolean, close: () -> Unit) {
     val E = LocalEngine.current; val ui = LocalUi.current; val ctx = LocalContext.current
     val haptic = LocalHapticFeedback.current
     var q by remember { mutableStateOf("") }
@@ -328,7 +338,7 @@ fun Drawer(nest: NestedScrollConnection, open: Boolean, close: () -> Unit) {
             Text("SETTINGS", Modifier.clickable { ui.settings = true }.padding(vertical = 6.dp), style = mono)
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
-            LazyColumn(Modifier.fillMaxSize().nestedScroll(nest).padding(end = if (q.isBlank()) 22.dp else 0.dp), state = list, contentPadding = PaddingValues(bottom = 30.dp)) {
+            LazyColumn(Modifier.fillMaxSize().padding(end = if (q.isBlank()) 22.dp else 0.dp), state = list, contentPadding = PaddingValues(bottom = 30.dp)) {
                 if (q.isBlank()) items(apps, key = { it.key }) { e -> DrawerRow(e, Modifier.animateItem()) { menu = e } }
                 else {
                     itemsIndexed(results, key = { _, e -> "r" + e.key }) { i, e -> DrawerRow(e, Modifier.animateItem(), first = i == 0) { menu = e } }

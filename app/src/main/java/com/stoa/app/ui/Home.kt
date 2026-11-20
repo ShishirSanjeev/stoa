@@ -90,43 +90,74 @@ fun Page(nest: NestedScrollConnection? = null, content: @Composable () -> Unit) 
         .statusBarsPadding().padding(horizontal = 16.dp).padding(top = 10.dp, bottom = 28.dp)) { content() }
 }
 
+fun greetingFor(p: com.stoa.app.Prefs): String {
+    val h = LocalTime.now().hour
+    return if (h < 5) p.str("greet_night", "Quiet night") else if (h < 12) p.str("greet_morning", "Good morning") else if (h < 18) p.str("greet_afternoon", "Good afternoon") else p.str("greet_evening", "Good evening")
+}
+
 @Composable
-fun HomePage(nest: NestedScrollConnection, openDrawer: () -> Unit) {
+fun HomePage(nest: NestedScrollConnection) {
     val E = LocalEngine.current; val ui = LocalUi.current; val ink = LocalInk.current
     var time by remember { mutableStateOf(LocalTime.now()) }
     LaunchedEffect(Unit) { while (true) { time = LocalTime.now(); delay(1000L * (60 - time.second).coerceAtLeast(1)) } }
     Page(nest) {
-        Row(verticalAlignment = Alignment.Top) {
-            Column(Modifier.weight(1f)) {
-                Text(time.format(DateTimeFormatter.ofPattern("HH:mm")), fontFamily = Display, fontWeight = FontWeight.ExtraLight, fontSize = 96.sp, lineHeight = 96.sp, letterSpacing = (-3).sp, color = ink.ink)
-                Text(LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE  d MMMM")).uppercase(), fontFamily = Mono, fontSize = 11.sp, letterSpacing = 1.8.sp, color = ink.mute)
-                SyncLine(Modifier.padding(top = 6.dp))
-            }
-            IconBtn(Icons.Outlined.Tune, "Settings & layout", { ui.settings = true })
+        // greeting · home name ............ date
+        Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(greetingFor(ui.prefs), fontFamily = Display, fontSize = 15.sp, color = ink.ink)
+            Text("  ·  " + ui.homeName.uppercase(), fontFamily = Mono, fontSize = 10.sp, letterSpacing = 1.8.sp, color = ink.mute, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(LocalDate.now().format(DateTimeFormatter.ofPattern("EEE d MMM")).uppercase(), fontFamily = Mono, fontSize = 13.sp, letterSpacing = 1.4.sp, color = ink.mute)
+            Spacer(Modifier.width(4.dp))
+            IconBtn(Icons.Outlined.Tune, "Settings & layout", { ui.settings = true }, size = 18.dp)
         }
-        Spacer(Modifier.height(10.dp))
+        Text(time.format(DateTimeFormatter.ofPattern("HH:mm")), fontFamily = Display, fontWeight = FontWeight.ExtraLight, fontSize = 94.sp, lineHeight = 94.sp, letterSpacing = (-3).sp, color = ink.ink)
+        SyncLine()
+        Spacer(Modifier.height(6.dp))
         E.error?.let { err -> StoaCard("Set up") { Muted(err, size = 14); Spacer(Modifier.height(10.dp)); Pill("Open settings", { ui.settings = true }, primary = true) } }
         for (w in ui.layout.on(ui.layout.home)) when (w) {
             "level" -> StoaCard(flat = true) { LevelBlock(E.rpg) }
-            "quick" -> QuickRow()
-            "pins" -> PinnedCard()
+            "screen" -> UsageGraph()
             "three" -> ThreeCard()
-            "screen" -> ScreenTimeCard()
-            "due" -> DueCard()
-            "seren" -> SerenCard()
+            "search" -> SearchCard()
             "capture" -> CaptureCard()
+            "pins" -> PinnedCard()
+            "seren" -> SerenCard()
+            "due" -> DueCard()
         }
-        // swipe-up affordance + dock
-        val bob = rememberInfiniteTransition(label = "bob").animateFloat(0f, -5f, infiniteRepeatable(tween(1200), RepeatMode.Reverse), label = "bob")
-        Column(Modifier.fillMaxWidth().padding(top = 22.dp, bottom = 4.dp).clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null) { openDrawer() },
-            horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Outlined.KeyboardArrowUp, null, Modifier.graphicsLayer { translationY = bob.value * density }, tint = ink.faint)
-            Kicker("Swipe up for apps", color = ink.faint)
+    }
+}
+
+/** Today's screen time by hour — a quiet bar chart. */
+@Composable
+fun UsageGraph() {
+    val ctx = LocalContext.current; val ui = LocalUi.current; val ink = LocalInk.current
+    var tick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) { while (true) { delay(300_000); tick++ } }
+    val has = remember(ui.resume) { Apps.hasUsage(ctx) }
+    val hours by produceState(IntArray(24), ui.resume, tick) { value = withContext(Dispatchers.IO) { Apps.hourlyUsage(ctx) } }
+    val grow by androidx.compose.animation.core.animateFloatAsState(if (hours.sum() > 0) 1f else 0f, tween(900), label = "grow")
+    val now = LocalTime.now().hour
+    StoaCard("Screen time") {
+        if (!has) { Muted("Allow usage access to see your day's screen time.", size = 13); Spacer(Modifier.height(8.dp)); Pill("Allow usage access", { Apps.askUsage(ctx) }, small = true); return@StoaCard }
+        val total = hours.sum()
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(if (total >= 60) "${total / 60}h ${total % 60}m" else "${total}m", fontFamily = Display, fontWeight = FontWeight.Light, fontSize = 30.sp, color = ink.ink, modifier = Modifier.weight(1f))
+            val peak = hours.indices.maxByOrNull { hours[it] } ?: 0
+            if (total > 0) Kicker("peak ${"%02d".format(peak)}:00 · ${ui.prefs.resisted(LocalDate.now().toString())} resisted")
         }
-        val all = entries(ui)
-        Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-            ui.layout.dock.mapNotNull { k -> all.find { it.key == k } }.take(4).forEach { AppTile(it, false) }
+        Spacer(Modifier.height(10.dp))
+        val barC = ink.ink; val dimC = ink.line2; val faint = ink.faint
+        androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(70.dp)) {
+            val n = 24; val gap = 3.dp.toPx(); val w = (size.width - gap * (n - 1)) / n
+            val mx = maxOf(30, hours.maxOrNull() ?: 0).toFloat()
+            for (i in 0 until n) {
+                val v = hours[i] / mx * size.height * grow
+                val x = i * (w + gap)
+                drawRoundRect(dimC, androidx.compose.ui.geometry.Offset(x, size.height - 2.dp.toPx()), androidx.compose.ui.geometry.Size(w, 2.dp.toPx()), androidx.compose.ui.geometry.CornerRadius(1.dp.toPx()))
+                if (v > 0f) drawRoundRect(if (i == now) barC else barC.copy(alpha = .55f), androidx.compose.ui.geometry.Offset(x, size.height - v), androidx.compose.ui.geometry.Size(w, v), androidx.compose.ui.geometry.CornerRadius(2.dp.toPx()))
+                if (i == now) drawCircle(faint, 1.5.dp.toPx(), androidx.compose.ui.geometry.Offset(x + w / 2, size.height + 5.dp.toPx()))
+            }
         }
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp)) { listOf("00", "06", "12", "18", "24").forEachIndexed { i, l -> Text(l, Modifier.weight(1f), fontFamily = Mono, fontSize = 9.sp, color = ink.faint, textAlign = if (i == 4) androidx.compose.ui.text.style.TextAlign.End else androidx.compose.ui.text.style.TextAlign.Start) } }
     }
 }
 
@@ -250,36 +281,6 @@ fun CaptureCard() {
             }
         })
         Spacer(Modifier.height(6.dp)); Muted("Ideas land in ${E.capture.substringAfterLast('/')} · start with /task to add to your Inbox", size = 12)
-    }
-}
-
-private val QUICK_ICONS = mapOf("idea" to Icons.Outlined.Lightbulb, "task" to Icons.Outlined.AddTask, "daily" to Icons.Outlined.CalendarToday, "read" to Icons.Outlined.MenuBook,
-    "still" to Icons.Outlined.SelfImprovement, "gym" to Icons.Outlined.FitnessCenter, "canvas" to Icons.Outlined.Gesture, "sync" to Icons.Outlined.Sync, "shots" to Icons.Outlined.Screenshot, "search" to Icons.Outlined.Search)
-
-/** One-tap shortcuts into the parts of Stoa you use most. */
-@Composable
-fun QuickRow() {
-    val E = LocalEngine.current; val ui = LocalUi.current; val ink = LocalInk.current; val ctx = LocalContext.current; val scope = rememberCoroutineScope()
-    val keys = ui.layout.on(ui.layout.quick)
-    if (keys.isEmpty()) return
-    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-        keys.forEach { k ->
-            Column(Modifier.press({
-                when (k) {
-                    "idea", "task" -> ui.capture = k
-                    "daily" -> scope.launch { val rel = E.ensureDaily(); Apps.openInObsidian(ctx, E.vaultName, rel) }
-                    "read" -> ui.go("reading"); "still" -> ui.go("still"); "gym" -> ui.go("gym"); "canvas" -> ui.go("canvas"); "shots" -> ui.go("shots")
-                    "search" -> ui.drawerReq++
-                    "sync" -> com.stoa.app.SyncNow.start(ctx)
-                }
-            }), horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.size(54.dp).clip(CircleShape).border(1.dp, ink.line2, CircleShape), contentAlignment = Alignment.Center) {
-                    Icon(QUICK_ICONS[k] ?: Icons.Outlined.Search, QUICK[k], Modifier.size(22.dp), tint = ink.ink)
-                }
-                Spacer(Modifier.height(6.dp))
-                Text((QUICK[k] ?: k).uppercase(), fontFamily = Mono, fontSize = 9.sp, letterSpacing = 1.2.sp, color = ink.mute)
-            }
-        }
     }
 }
 

@@ -45,6 +45,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         (application as StoaApp).engine.scan()
         ui.resume++
+        Watch.sync(this)
         loadApps()
     }
 

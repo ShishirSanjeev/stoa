@@ -12,12 +12,12 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 val SECTIONS = linkedMapOf(
-    "home" to "Home", "today" to "Today", "notes" to "Notes", "gym" to "Gym",
+    "home" to "Home", "today" to "Today", "almanac" to "Almanac", "notes" to "Notes", "gym" to "Gym",
     "reading" to "Reading", "still" to "Stillness", "writing" to "Writing", "tasks" to "Book tasks",
     "ideas" to "Ideas", "canvas" to "Canvas", "shots" to "Screenshots"
 )
-val SECTION_TAB = mapOf("reading" to "today", "still" to "today", "writing" to "notes", "tasks" to "notes", "ideas" to "notes", "canvas" to "notes", "shots" to "notes")
-val HOME_WIDGETS = linkedMapOf("level" to "Level & XP", "quick" to "Quick shortcuts", "pins" to "Pinned apps & folders", "three" to "Today's three", "screen" to "Screen time", "due" to "Due soon", "seren" to "Serendipity", "capture" to "Capture an idea")
+val SECTION_TAB = mapOf("reading" to "today", "still" to "today", "writing" to "today", "tasks" to "notes", "ideas" to "notes", "canvas" to "notes", "shots" to "notes", "gym" to "notes")
+val HOME_WIDGETS = linkedMapOf("level" to "Level & XP", "screen" to "Usage graph", "three" to "Today's three", "search" to "Search", "capture" to "Capture an idea", "pins" to "Pinned apps & folders", "seren" to "Serendipity", "due" to "Due soon")
 val QUICK = linkedMapOf("idea" to "Idea", "task" to "Task", "daily" to "Daily note", "read" to "Read", "still" to "Breathe", "gym" to "Lift", "canvas" to "Canvas", "shots" to "Shots", "search" to "Search", "sync" to "Sync")
 val TODAY_SECTIONS = linkedMapOf("three" to "Today's three", "routines" to "Routines", "habits" to "Habits", "projects" to "Projects")
 
@@ -31,18 +31,19 @@ data class Layout(
     fun toJson(): String {
         fun arr(l: List<Pair<String, Boolean>>) = JSONArray(l.map { JSONArray(listOf(it.first, it.second)) })
         return JSONObject().put("tabs", arr(tabs)).put("home", arr(home)).put("today", arr(today)).put("todaySections", arr(todaySections))
-            .put("notes", arr(notes)).put("dock", JSONArray(dock)).put("quick", arr(quick)).toString()
+            .put("notes", arr(notes)).put("dock", JSONArray(dock)).put("quick", arr(quick)).put("v", 2).toString()
     }
     companion object {
         val DEFAULT = Layout(
-            listOf("home", "today", "notes", "gym").map { it to true },
+            listOf("home", "today", "almanac", "notes").map { it to true },
             HOME_WIDGETS.keys.map { it to true },
-            listOf("today", "reading", "still").map { it to true },
+            listOf("today", "reading", "still", "writing").map { it to true },
             TODAY_SECTIONS.keys.map { it to true },
-            listOf("writing", "tasks", "ideas", "canvas", "shots").map { it to true },
+            listOf("tasks", "ideas", "canvas", "shots", "gym").map { it to true },
             listOf("sec:today", "sec:writing", "sec:gym", "sec:shots"))
         fun load(p: Prefs): Layout {
             val j = p.json("layout") ?: return DEFAULT
+            if (j.optInt("v", 1) < 2) return DEFAULT.copy(dock = DEFAULT.dock)   // new page structure: start from the new order
             fun list(k: String, def: List<Pair<String, Boolean>>): List<Pair<String, Boolean>> {
                 val a = j.optJSONArray(k) ?: return def
                 val got = (0 until a.length()).mapNotNull { i -> a.optJSONArray(i)?.let { it.optString(0) to it.optBoolean(1, true) } }.filter { g -> def.any { it.first == g.first } }
@@ -59,13 +60,16 @@ data class Layout(
 class UiState(val prefs: Prefs) {
     var tab by mutableStateOf("home")
     var todaySub by mutableStateOf("today")
-    var notesSub by mutableStateOf("writing")
+    var notesSub by mutableStateOf("tasks")
     var canvas by mutableStateOf<String?>(null)
     var viewer by mutableStateOf<Int?>(null)
     var settings by mutableStateOf(false)
     var pauseFor by mutableStateOf<LApp?>(null)
     var drawerReq by mutableIntStateOf(0)
     var homeTick by mutableIntStateOf(0)
+    val subPagers = mutableMapOf<String, androidx.compose.foundation.pager.PagerState>()
+    var pendingSub by mutableStateOf<String?>(null)
+    var homeName by mutableStateOf(prefs.str("home_name", "Atrium"))
     var shots by mutableStateOf<List<android.net.Uri>>(emptyList())
     var reader by mutableStateOf<String?>(null)
     var folder by mutableStateOf<String?>(null)
@@ -89,6 +93,7 @@ class UiState(val prefs: Prefs) {
         val t = SECTION_TAB[key]
         if (t == null) { tab = key; return }
         if (t == "today") todaySub = key else notesSub = key
+        subPagers[t]?.let { pendingSub = key }
         tab = t
     }
 }

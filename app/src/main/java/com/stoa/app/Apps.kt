@@ -50,6 +50,38 @@ object Apps {
         catch (e: Exception) { android.widget.Toast.makeText(ctx, "Install Obsidian to open notes", android.widget.Toast.LENGTH_SHORT).show() }
     }
 
+    /** Pulls down the notification shade (needs EXPAND_STATUS_BAR, a normal permission). */
+    @android.annotation.SuppressLint("WrongConstant")
+    fun expandNotifications(ctx: Context) {
+        try { val sb = ctx.getSystemService("statusbar"); Class.forName("android.app.StatusBarManager").getMethod("expandNotificationsPanel").invoke(sb) } catch (e: Exception) { }
+    }
+    fun hasOverlay(ctx: Context) = Settings.canDrawOverlays(ctx)
+    fun askOverlay(ctx: Context) = try { ctx.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + ctx.packageName)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (e: Exception) { }
+    fun hasNotifications(ctx: Context) = Build.VERSION.SDK_INT < 33 || ctx.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+    fun webSearch(ctx: Context, q: String) = openUrl(ctx, "https://www.google.com/search?q=" + Uri.encode(q))
+
+    /** Minutes of screen time in each hour of today (index 0 = midnight), from app-in-front events. */
+    fun hourlyUsage(ctx: Context): IntArray {
+        val out = IntArray(24)
+        if (!hasUsage(ctx)) return out
+        val um = ctx.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+        val start = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(); val now = System.currentTimeMillis()
+        val ev = um.queryEvents(start, now); val e = android.app.usage.UsageEvents.Event()
+        val ms = LongArray(24); var openPkg: String? = null; var openAt = 0L
+        fun add(a: Long, b: Long) { var t = a; while (t < b) { val h = ((t - start) / 3_600_000L).toInt().coerceIn(0, 23); val end = minOf(b, start + (h + 1) * 3_600_000L); ms[h] += end - t; t = end } }
+        while (ev.hasNextEvent()) {
+            ev.getNextEvent(e)
+            when (e.eventType) {
+                android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED -> { if (openPkg != null) add(openAt, e.timeStamp); openPkg = e.packageName; openAt = e.timeStamp }
+                android.app.usage.UsageEvents.Event.ACTIVITY_PAUSED -> if (openPkg == e.packageName) { add(openAt, e.timeStamp); openPkg = null }
+                android.app.usage.UsageEvents.Event.SCREEN_NON_INTERACTIVE -> if (openPkg != null) { add(openAt, e.timeStamp); openPkg = null }
+            }
+        }
+        if (openPkg != null) add(openAt, now)
+        for (i in 0 until 24) out[i] = (ms[i] / 60_000L).toInt().coerceAtMost(60)
+        return out
+    }
+
     /* ── permissions ── */
     fun hasAllFiles(ctx: Context): Boolean = if (Build.VERSION.SDK_INT >= 30) Environment.isExternalStorageManager()
         else ctx.checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
@@ -66,11 +98,6 @@ object Apps {
         return mode == AppOpsManager.MODE_ALLOWED
     }
     fun askUsage(ctx: Context) = try { ctx.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (e: Exception) { }
-    fun hasAccessibility(ctx: Context): Boolean {
-        val s = Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: return false
-        return s.split(':').any { it.startsWith(ctx.packageName + "/") }
-    }
-    fun askAccessibility(ctx: Context) = try { ctx.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (e: Exception) { }
     fun isDefaultHome(ctx: Context): Boolean {
         val r = ctx.packageManager.resolveActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), PackageManager.MATCH_DEFAULT_ONLY)
         return r?.activityInfo?.packageName == ctx.packageName

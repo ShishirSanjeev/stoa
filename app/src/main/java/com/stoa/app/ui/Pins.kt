@@ -59,7 +59,20 @@ fun PinnedCard() {
     var adding by remember { mutableStateOf(false) }
     val all = entries(ui)
     StoaCard("Pinned", action = { IconBtn(Icons.Outlined.Add, "Pin something", { adding = true }, size = 18.dp) }) {
-        if (ui.pins.isEmpty()) Muted("Pin apps, folders and notes here. Long-press an app in the drawer, or tap + to pin a vault folder or note.", size = 13)
+        val bt = rememberBluetoothAudio()
+        val spotify = ui.apps.firstOrNull { it.pkg == "com.spotify.music" }
+        androidx.compose.animation.AnimatedVisibility(bt && spotify != null, enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.expandVertically(), exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.shrinkVertically()) {
+            spotify?.let { sp ->
+                val icon = produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, sp.pkg) { value = withContext(Dispatchers.IO) { Apps.icon(ctx, sp) } }.value
+                Row(Modifier.fillMaxWidth().clickable { Apps.launch(ctx, sp) }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) { if (icon != null) Image(icon, null, Modifier.size(26.dp), colorFilter = GREY2) }
+                    Spacer(Modifier.width(16.dp))
+                    Text(sp.label, Modifier.weight(1f), fontFamily = Display, fontWeight = FontWeight.Light, fontSize = 22.sp, color = ink.ink)
+                    Text("♪ CONNECTED", fontFamily = Mono, fontSize = 9.sp, letterSpacing = 1.2.sp, color = ink.mute)
+                }
+            }
+        }
+        if (ui.pins.isEmpty() && !(bt && spotify != null)) Muted("Pin apps, folders and notes here. Long-press an app in the drawer, or tap + to pin a vault folder or note.", size = 13)
         ui.pins.forEach { k ->
             val entry = if (k.startsWith("app:") || k.startsWith("sec:")) all.find { it.key == k } else null
             if ((k.startsWith("app:") || k.startsWith("sec:")) && entry == null) return@forEach
@@ -144,4 +157,25 @@ fun FolderBrowser(rel: String) {
             }
         }
     }
+}
+
+/** True while headphones, a speaker or a car is connected over Bluetooth (no permission needed). */
+@Composable
+fun rememberBluetoothAudio(): Boolean {
+    val ctx = LocalContext.current
+    val am = remember { ctx.getSystemService(android.media.AudioManager::class.java) }
+    fun check() = am.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS).any {
+        it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP || it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+            (android.os.Build.VERSION.SDK_INT >= 31 && (it.type == android.media.AudioDeviceInfo.TYPE_BLE_HEADSET || it.type == android.media.AudioDeviceInfo.TYPE_BLE_SPEAKER))
+    }
+    var on by remember { mutableStateOf(check()) }
+    androidx.compose.runtime.DisposableEffect(am) {
+        val cb = object : android.media.AudioDeviceCallback() {
+            override fun onAudioDevicesAdded(added: Array<out android.media.AudioDeviceInfo>?) { on = check() }
+            override fun onAudioDevicesRemoved(removed: Array<out android.media.AudioDeviceInfo>?) { on = check() }
+        }
+        am.registerAudioDeviceCallback(cb, null)
+        onDispose { am.unregisterAudioDeviceCallback(cb) }
+    }
+    return on
 }

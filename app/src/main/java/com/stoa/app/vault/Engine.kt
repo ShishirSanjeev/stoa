@@ -237,10 +237,21 @@ class Engine(private val ctx: Context) {
 
     /* ── XP ── */
     fun allTasks(): List<Task> = tasks.values.flatten()
+    fun rpgOpts(): RpgOpts {
+        val tk = today(); val all = allTasks()
+        return RpgOpts(tk, prefs.bool("weekStartsMonday", false), areas(), habitList(), dash["habit_added"].asMap().mapValues { it.value.toString() },
+            habitList().size, mdPaths.size, all.count { it.status == "open" && it.due != null && it.due < tk })
+    }
+    /** Web clippings whose "created" date (set by the Web Clipper) falls in [from, to]; newest first. */
+    fun clippingsBetween(from: String, to: String): List<Pair<String, String>> = clippingFiles().mapNotNull { rel ->
+        val fm = readHead(rel)?.let { Frontmatter.split(it).fm } ?: emptyMap()
+        val d = fm["created"]?.toString()?.take(10)?.takeIf { Regex("\\d{4}-\\d{2}-\\d{2}").matches(it) }
+            ?: Instant.ofEpochMilli(file(rel).lastModified()).atZone(ZoneId.systemDefault()).toLocalDate().toString()
+        if (d in from..to) rel to d else null
+    }.sortedByDescending { it.second }
     private fun recompute() {
         val tk = today(); val all = allTasks()
-        val S = computeStats(all, days, noteDays, RpgOpts(tk, prefs.bool("weekStartsMonday", false), areas(), habitList(), dash["habit_added"].asMap().mapValues { it.value.toString() },
-            habitList().size, mdPaths.size, all.count { it.status == "open" && it.due != null && it.due < tk }))
+        val S = computeStats(all, days, noteDays, rpgOpts())
         val raw = evaluateRpg(S)
         // Calibrate to the dashboard: it writes its own total as rpg_xp; we carry the difference so both show the same number.
         val dx = dash["rpg_xp"].asInt(); val at = dash["rpg_at"]?.toString() ?: ""

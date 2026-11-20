@@ -85,7 +85,7 @@ data class Active(val start: Long, val name: String, val ex: List<AEx>) {
 }
 
 @Composable
-fun GymPage() {
+fun GymView() {
     val E = LocalEngine.current; val ui = LocalUi.current; val p = ui.prefs; val ink = LocalInk.current; val scope = rememberCoroutineScope()
     var active by remember { mutableStateOf(Active.load(p)) }
     fun set(a: Active?) { active = a; p.put("active", a?.json()) }
@@ -93,15 +93,14 @@ fun GymPage() {
     val custom = (E.stoa["gym_custom"] as? List<*>)?.mapNotNull { (it as? Map<*, *>)?.let { m -> m["name"].toString() to (m["muscle"]?.toString() ?: "Other") } } ?: emptyList()
     val templates = (E.stoa["gym_templates"] as? List<*>)?.mapNotNull { (it as? Map<*, *>)?.let { m -> m["name"].toString() to ((m["ex"] as? List<*>)?.map { x -> x.toString() } ?: emptyList()) } } ?: emptyList()
     fun muscleOf(n: String) = (LIB + custom).firstOrNull { it.first.equals(n, true) }?.second ?: "Other"
-    Page {
-        H1("Gym")
+    Column {
         val a = active
         if (a != null) { ActiveWorkout(a, ::set, custom, ::muscleOf) { done ->
             set(null); p.put("rest_end", 0L)
             val ex = done.ex.map { e -> WEx(e.name, e.sets.filter { it.done || (it.reps.toIntOrNull() ?: 0) > 0 }.map { WSet(it.kg, it.reps) }) }.filter { it.sets.isNotEmpty() }
             if (ex.isEmpty()) E.toast("Nothing logged", "Workout discarded")
             else { if (templates.none { it.first == done.name }) tplFrom = ex.map { it.name }; scope.launch { E.writeWorkout(done.name, done.start, System.currentTimeMillis(), ex) } }
-        }; return@Page }
+        }; return@Column }
 
         tplFrom?.let { names ->
             var n by remember { mutableStateOf("") }

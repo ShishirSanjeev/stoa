@@ -74,26 +74,19 @@ import java.time.format.DateTimeFormatter
 fun TodayPage() {
     val ui = LocalUi.current
     val subs = ui.layout.on(ui.layout.today).ifEmpty { listOf("today") }
-    if (!subs.contains(ui.todaySub)) ui.todaySub = subs.first()
-    Page {
-        H1("Today"); Kicker(LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE  d MMMM")))
-        if (subs.size > 1) Seg(subs.map { it to (if (it == "today") "Today" else SECTIONS[it] ?: it) }, ui.todaySub, { ui.todaySub = it })
-        AnimatedContent(ui.todaySub, label = "todaySub", transitionSpec = { (fadeIn(tween(220)) + slideInVertically(tween(300, easing = FastOutSlowInEasing)) { it / 30 }) togetherWith fadeOut(tween(90)) }) { s ->
-            Column {
-                when (s) {
-                    "reading" -> ReadingView()
-                    "still" -> StillView()
-                    else -> TodayView()
-                }
-            }
+    SubPaged("Today", LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE  d MMMM")), "today", subs.map { it to (if (it == "today") "Today" else SECTIONS[it] ?: it) }, ui.todaySub, { ui.todaySub = it }) { s ->
+        when (s) {
+            "reading" -> ReadingView()
+            "still" -> StillView()
+            "writing" -> Writing()
+            else -> TodayView()
         }
     }
 }
 
 @Composable
 fun TodayView() {
-    val E = LocalEngine.current; val ui = LocalUi.current
-    StoaCard(flat = true) { LevelBlock(E.rpg, compact = true) }
+    val ui = LocalUi.current
     for (s in ui.layout.on(ui.layout.todaySections)) when (s) {
         "three" -> ThreeCard()
         "routines" -> RoutinesCard()
