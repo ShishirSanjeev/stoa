@@ -126,13 +126,13 @@ fun CanvasEditor(rel: String) {
     LaunchedEffect(dirty) { if (dirty > 0) { delay(500); saveNow() } }
     fun close() { scope.launch { saveNow(); ui.canvas = null } }
     fun sane() { if (!k.isFinite() || k <= 0f) k = 1f; if (!tx.isFinite()) tx = 0f; if (!ty.isFinite()) ty = 0f }
-    fun fit() { fitRaw(); sane() }
     fun fitRaw() {
         if (nodes.isEmpty()) { k = 1f; tx = size.x / 2; ty = size.y / 3; return }
         val x0 = nodes.minOf { it.x }; val y0 = nodes.minOf { it.y }; val x1 = nodes.maxOf { it.x + it.w }; val y1 = nodes.maxOf { it.y + it.h }
         k = minOf((size.x - 60) / ((x1 - x0) * dens), (size.y - 60) / ((y1 - y0) * dens)).coerceIn(.15f, 1.4f)
         tx = size.x / 2 - (x0 + x1) / 2 * dens * k; ty = size.y / 2 - (y0 + y1) / 2 * dens * k
     }
+    fun fit() { fitRaw(); sane() }
     fun centre() = Offset((size.x / 2 - tx) / k / dens, (size.y / 2 - ty) / k / dens)
     fun addText(at: Offset) { val n = CNode(JSONObject().put("type", "text").put("text", "").put("x", (at.x - 130).toInt()).put("y", (at.y - 60).toInt()).put("width", 260).put("height", 120)); nodes.add(n); sel = n.id; tfv = androidx.compose.ui.text.input.TextFieldValue(""); editing = n.id; dirty++ }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
