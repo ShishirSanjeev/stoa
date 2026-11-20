@@ -100,6 +100,7 @@ fun SettingsScreen() {
             HomeSettings()
             WallpaperSettings()
             DockSettings()
+            CrashCard()
             LayoutEditor()
             MindfulEditor()
             StoaCard("Notes & folders") {
@@ -237,5 +238,20 @@ fun DockSettings() {
         if (packs.isEmpty()) Muted("No icon packs installed. Any pack that supports Nova or ADW (most on the Play Store) will show up here.", size = 12)
         Chips(listOf("") + packs.map { it.pkg }, ui.iconPack, { k -> if (k.isEmpty()) "System" else packs.firstOrNull { it.pkg == k }?.label ?: k }) { setPack(it) }
         Muted("Long-press an app in the drawer → Add to dock. In the dock, long-press and drag to re-order; drop onto another icon to make a folder.", Modifier.padding(top = 8.dp), 11)
+    }
+}
+
+@Composable
+fun CrashCard() {
+    val ctx = LocalContext.current
+    var log by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(ctx.getSharedPreferences("crash", android.content.Context.MODE_PRIVATE).getString("last", "") ?: "") }
+    if (log.isBlank()) return
+    StoaCard("Last crash") {
+        Muted(log.take(700), size = 11)
+        Row(Modifier.padding(top = 10.dp)) {
+            Pill("Copy", { (ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("Stoa crash", log)) }, small = true)
+            androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
+            Pill("Clear", { ctx.getSharedPreferences("crash", android.content.Context.MODE_PRIVATE).edit().clear().apply(); log = "" }, small = true)
+        }
     }
 }

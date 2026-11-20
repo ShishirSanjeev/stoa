@@ -116,13 +116,16 @@ private fun Balance(ws: Int) {
     }
 }
 
+private val DAY_W = 21.dp
+private val TALLY_W = 28.dp
+
 @Composable
 private fun DayHeader(keys: List<String>) {
     val ink = LocalInk.current; val today = LocalDate.now().toString()
     Row(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
-        Spacer(Modifier.weight(1.6f))
-        keys.forEach { k -> Text(LocalDate.parse(k).format(DateTimeFormatter.ofPattern("EEEEE")), Modifier.weight(1f), textAlign = TextAlign.Center, fontFamily = Mono, fontSize = 10.sp, color = if (k == today) ink.ink else ink.faint) }
-        Spacer(Modifier.width(34.dp))
+        Spacer(Modifier.weight(1f))
+        keys.forEach { k -> Text(LocalDate.parse(k).format(DateTimeFormatter.ofPattern("EEEEE")), Modifier.width(DAY_W), textAlign = TextAlign.Center, fontFamily = Mono, fontSize = 10.sp, color = if (k == today) ink.ink else ink.faint) }
+        Spacer(Modifier.width(TALLY_W))
     }
 }
 
@@ -136,17 +139,17 @@ private fun BioMetrics(keys: List<String>) {
             if (h.trim().startsWith("---")) { val l = h.trim().removePrefix("---").trim(); if (l.isNotEmpty()) Kicker(l, Modifier.padding(top = 10.dp, bottom = 2.dp)); return@forEach }
             val lo = h.lowercase(); val n = keys.count { E.days[it]?.done?.contains(lo) == true }
             Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text((E.habitIcon(h).let { if (it.isNotEmpty()) "$it " else "" }) + h, Modifier.weight(1.6f), fontSize = 14.sp, color = ink.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text((E.habitIcon(h).let { if (it.isNotEmpty()) "$it " else "" }) + h, Modifier.weight(1f).padding(end = 6.dp), fontSize = 14.sp, color = ink.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 keys.forEach { k ->
                     val on = E.days[k]?.done?.contains(lo) == true; val future = k > today
-                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    Box(Modifier.width(DAY_W), contentAlignment = Alignment.Center) {
                         val sc by animateFloatAsState(if (on) 1f else .0f, spring(dampingRatio = .5f), label = "c")
-                        Box(Modifier.size(18.dp).clip(CircleShape).border(1.dp, if (future) ink.line else ink.line2, CircleShape).clickable(enabled = !future) { E.setHabit(h, !on, k) }, contentAlignment = Alignment.Center) {
-                            Box(Modifier.size((18 * sc).dp).clip(CircleShape).background(ink.ink))
+                        Box(Modifier.size(16.dp).clip(CircleShape).border(1.dp, if (future) ink.line else ink.line2, CircleShape).clickable(enabled = !future) { E.setHabit(h, !on, k) }, contentAlignment = Alignment.Center) {
+                            Box(Modifier.size((16 * sc).dp).clip(CircleShape).background(ink.ink))
                         }
                     }
                 }
-                Text("$n/7", Modifier.width(34.dp), textAlign = TextAlign.End, fontFamily = Mono, fontSize = 11.sp, color = ink.mute)
+                Text("$n/7", Modifier.width(TALLY_W), textAlign = TextAlign.End, fontFamily = Mono, fontSize = 11.sp, color = ink.mute)
             }
         }
     }
@@ -164,12 +167,12 @@ private fun RoutineWeek(keys: List<String>) {
             Row(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 2.dp)) { Kicker(label, Modifier.weight(1f)); Kicker("$full/7 full") }
             (R[kind] ?: emptyList()).forEach { step ->
                 Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text((if (step.emoji.isNotEmpty()) step.emoji + " " else "") + step.text, Modifier.weight(1.6f), fontSize = 13.5.sp, color = ink.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text((if (step.emoji.isNotEmpty()) step.emoji + " " else "") + step.text, Modifier.weight(1f).padding(end = 6.dp), fontSize = 13.5.sp, color = ink.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     keys.forEach { k ->
                         val d = E.days[k]; val on = (if (kind == "morning") d?.morning else d?.evening)?.contains(step.text) == true
-                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Box(Modifier.size(if (on) 10.dp else 6.dp).clip(CircleShape).background(if (on) ink.ink else ink.line2)) }
+                        Box(Modifier.width(DAY_W), contentAlignment = Alignment.Center) { Box(Modifier.size(if (on) 10.dp else 6.dp).clip(CircleShape).background(if (on) ink.ink else ink.line2)) }
                     }
-                    Spacer(Modifier.width(34.dp))
+                    Spacer(Modifier.width(TALLY_W))
                 }
             }
         }

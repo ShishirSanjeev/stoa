@@ -7,6 +7,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.ui.text.withStyle
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -111,7 +113,8 @@ fun CanvasEditor(rel: String) {
     val root = remember(rel) { try { JSONObject(E.readText(rel)?.ifBlank { "{}" } ?: "{}") } catch (e: Exception) { JSONObject() } }
     val nodes = remember(rel) { mutableStateListOf<CNode>().apply { val a = root.optJSONArray("nodes") ?: JSONArray(); for (i in 0 until a.length()) a.optJSONObject(i)?.let { add(CNode(it)) } } }
     val edges = remember(rel) { mutableStateListOf<JSONObject>().apply { val a = root.optJSONArray("edges") ?: JSONArray(); for (i in 0 until a.length()) a.optJSONObject(i)?.let { add(it) } } }
-    var link by remember { mutableStateOf<Pair<String, Offset>?>(null) }
+    var linking by remember { mutableStateOf<String?>(null) }   // tap ○, then tap the card to connect
+    var tfv by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue("")) }
     var sel by remember { mutableStateOf<String?>(null) }
     var editing by remember { mutableStateOf<String?>(null) }
     var tx by remember { mutableFloatStateOf(0f) }; var ty by remember { mutableFloatStateOf(0f) }; var k by remember { mutableFloatStateOf(1f) }
@@ -129,7 +132,7 @@ fun CanvasEditor(rel: String) {
         tx = size.x / 2 - (x0 + x1) / 2 * dens * k; ty = size.y / 2 - (y0 + y1) / 2 * dens * k
     }
     fun centre() = Offset((size.x / 2 - tx) / k / dens, (size.y / 2 - ty) / k / dens)
-    fun addText(at: Offset) { val n = CNode(JSONObject().put("type", "text").put("text", "").put("x", (at.x - 130).toInt()).put("y", (at.y - 60).toInt()).put("width", 260).put("height", 120)); nodes.add(n); sel = n.id; editing = n.id; dirty++ }
+    fun addText(at: Offset) { val n = CNode(JSONObject().put("type", "text").put("text", "").put("x", (at.x - 130).toInt()).put("y", (at.y - 60).toInt()).put("width", 260).put("height", 120)); nodes.add(n); sel = n.id; tfv = androidx.compose.ui.text.input.TextFieldValue(""); editing = n.id; dirty++ }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
@@ -164,7 +167,7 @@ fun CanvasEditor(rel: String) {
                 val nk = (k * zoom).coerceIn(.1f, 3f)
                 tx = centroid.x - (centroid.x - tx) * nk / k + pan.x; ty = centroid.y - (centroid.y - ty) * nk / k + pan.y; k = nk
             } }
-            .pointerInput(Unit) { detectTapGestures(onTap = { sel = null; editing = null }, onDoubleTap = { o -> addText(Offset((o.x - tx) / k / dens, (o.y - ty) / k / dens)) }) }) {
+            .pointerInput(Unit) { detectTapGestures(onTap = { sel = null; editing = null; linking = null }, onDoubleTap = { o -> addText(Offset((o.x - tx) / k / dens, (o.y - ty) / k / dens)) }) }) {
             val W = constraints.maxWidth.toFloat(); val Hh = constraints.maxHeight.toFloat()
             LaunchedEffect(W, Hh) { size = Offset(W, Hh); fit() }
             val dot = ink.line2
@@ -200,32 +203,35 @@ fun CanvasEditor(rel: String) {
                         if (e.optString("toEnd", "arrow") != "none") arrow(p2, c2, c)
                         if (e.optString("fromEnd", "none") == "arrow") arrow(p1, c1, c)
                     }
-                    link?.let { (id, at) -> byId[id]?.let { a -> val p1 = Offset(a.x + a.w, a.y + a.h / 2) * density; val p2 = at * density
-                        drawLine(lineC, p1, p2, 1.6.dp.toPx(), pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 8f))); arrow(p2, p1, lineC) } }
+                    linking?.let { id -> byId[id]?.let { a -> drawRoundRect(lineC, Offset(a.x - 6, a.y - 6) * density, androidx.compose.ui.geometry.Size(a.w + 12, a.h + 12) * density, androidx.compose.ui.geometry.CornerRadius(16 * density), style = androidx.compose.ui.graphics.drawscope.Stroke(1.5f * density, pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(12f, 9f)))) } }
                 }
-                nodes.sortedBy { if (it.type == "group") 0 else 1 }.forEach { n -> NodeView(n, sel == n.id, editing == n.id, dens,
-                    onSelect = { if (sel == n.id && n.type == "text") editing = n.id else { sel = n.id; if (editing != n.id) editing = null } },
-                    onPick = { if (sel != n.id) { sel = n.id; editing = null } }, onMoved = { dirty++ }, onText = { n.text = it; dirty++ }) }
-                // drag the little circle on a selected card onto another card to connect them (again to disconnect)
-                nodes.firstOrNull { it.id == sel }?.let { n ->
-                    Box(Modifier.offset((n.x + n.w - 14).dp, (n.y + n.h / 2 - 14).dp).size(28.dp)
-                        .pointerInput(n.id) { detectDragGestures(
-                            onDragStart = { link = n.id to Offset(n.x + n.w, n.y + n.h / 2) },
-                            onDragEnd = {
-                                val l = link; link = null
-                                if (l != null) nodes.lastOrNull { it.id != n.id && it.contains(l.second) }?.let { t ->
-                                    val ex = edges.firstOrNull { (it.optString("fromNode") == n.id && it.optString("toNode") == t.id) || (it.optString("fromNode") == t.id && it.optString("toNode") == n.id) }
-                                    if (ex != null) edges.remove(ex) else edges.add(JSONObject().put("id", hex16()).put("fromNode", n.id).put("fromSide", side(n, t)).put("toNode", t.id).put("toSide", side(t, n)).put("toEnd", "arrow"))
-                                    dirty++
-                                }
-                            }, onDragCancel = { link = null }) { ch, d -> ch.consume(); link = link?.let { it.first to (it.second + Offset(d.x / dens, d.y / dens)) } } },
+                fun connect(from: String, to: CNode) {
+                    val f = nodes.firstOrNull { it.id == from } ?: return
+                    val ex = edges.firstOrNull { (it.optString("fromNode") == from && it.optString("toNode") == to.id) || (it.optString("fromNode") == to.id && it.optString("toNode") == from) }
+                    if (ex != null) edges.remove(ex) else edges.add(JSONObject().put("id", hex16()).put("fromNode", from).put("fromSide", side(f, to)).put("toNode", to.id).put("toSide", side(to, f)).put("toEnd", "arrow"))
+                    dirty++
+                }
+                nodes.sortedBy { if (it.type == "group") 0 else 1 }.forEach { n -> NodeView(n, sel == n.id, editing == n.id, dens, k, tfv,
+                    onSelect = {
+                        val l = linking
+                        if (l != null) { if (l != n.id) connect(l, n); linking = null }
+                        else if (sel == n.id && n.type == "text") { tfv = androidx.compose.ui.text.input.TextFieldValue(n.text, androidx.compose.ui.text.TextRange(n.text.length)); editing = n.id }
+                        else { sel = n.id; if (editing != n.id) editing = null }
+                    },
+                    onPick = { if (sel != n.id) { sel = n.id; editing = null } }, onMoved = { dirty++ }, onText = { tfv = it; n.text = it.text; dirty++ }) }
+                // tap the little circle, then tap another card to connect (again to disconnect)
+                nodes.firstOrNull { it.id == sel }?.takeIf { editing == null }?.let { n ->
+                    val hs = (34f / k).coerceIn(28f, 120f)
+                    Box(Modifier.offset((n.x + n.w - hs / 2).dp, (n.y + n.h / 2 - hs / 2).dp).size(hs.dp)
+                        .pointerInput(n.id) { detectTapGestures { linking = if (linking == n.id) null else n.id } },
                         contentAlignment = Alignment.Center) {
-                        Box(Modifier.size(14.dp).clip(androidx.compose.foundation.shape.CircleShape).background(ink.bg).border(2.dp, ink.ink, androidx.compose.foundation.shape.CircleShape))
+                        val on = linking == n.id
+                        Box(Modifier.size((hs * .5f).dp).clip(androidx.compose.foundation.shape.CircleShape).background(if (on) ink.ink else ink.bg).border((2f / k).coerceIn(1.5f, 6f).dp, ink.ink, androidx.compose.foundation.shape.CircleShape))
                     }
                 }
             }
             val cur = nodes.firstOrNull { it.id == sel }
-            if (cur != null) Row(Modifier.align(Alignment.BottomCenter).padding(bottom = 64.dp).clip(RoundedCornerShape(50)).background(ink.card).border(1.dp, ink.line, RoundedCornerShape(50)).padding(horizontal = 10.dp, vertical = 8.dp),
+            if (cur != null && editing != cur.id) Row(Modifier.align(Alignment.BottomCenter).padding(bottom = 64.dp).clip(RoundedCornerShape(50)).background(ink.card).border(1.dp, ink.line, RoundedCornerShape(50)).padding(horizontal = 10.dp, vertical = 8.dp),
                 horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
                 listOf("", "1", "2", "3", "4", "5", "6").forEach { c ->
                     val col = canvasColor(c)
@@ -233,38 +239,121 @@ fun CanvasEditor(rel: String) {
                         .pointerInput(c, cur.id) { detectTapGestures { cur.color = c; dirty++ } })
                 }
             }
-            Text(if (cur != null) "Drag ○ onto another card to connect · again to disconnect" else "Double-tap to type · drag cards · pinch to zoom", Modifier.align(Alignment.BottomCenter).padding(bottom = 22.dp).clip(RoundedCornerShape(50)).background(ink.card).border(1.dp, ink.line, RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 6.dp),
+            if (cur != null && editing == cur.id) FormatBar(tfv, Modifier.align(Alignment.BottomCenter).padding(bottom = 64.dp)) { tfv = it; cur.text = it.text; dirty++ }
+            Text(when { linking != null -> "Now tap the card to connect to · tap again to disconnect"; editing != null -> "Select text, then format"; cur != null -> "Tap ○ to connect · drag the corner to resize · tap again to edit"; else -> "Double-tap to type · drag cards · pinch to zoom" }, Modifier.align(Alignment.BottomCenter).padding(bottom = 22.dp).clip(RoundedCornerShape(50)).background(ink.card).border(1.dp, ink.line, RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 6.dp),
                 fontSize = 12.sp, color = ink.mute)
         }
     }
 }
 
 @Composable
-fun NodeView(n: CNode, selected: Boolean, editing: Boolean, dens: Float, onSelect: () -> Unit, onPick: () -> Unit, onMoved: () -> Unit, onText: (String) -> Unit) {
+fun NodeView(n: CNode, selected: Boolean, editing: Boolean, dens: Float, k: Float, tfv: androidx.compose.ui.text.input.TextFieldValue,
+             onSelect: () -> Unit, onPick: () -> Unit, onMoved: () -> Unit, onText: (androidx.compose.ui.text.input.TextFieldValue) -> Unit) {
     val E = LocalEngine.current; val ink = LocalInk.current
     val shape = RoundedCornerShape(12.dp)
-    Box(Modifier.offset(n.x.dp, n.y.dp).size(n.w.dp, n.h.dp).clip(shape)
-        .background(canvasColor(n.color)?.copy(alpha = if (n.type == "group") .06f else .14f)?.compositeOver(ink.card) ?: if (n.type == "group") ink.bg.copy(alpha = 0f) else ink.card)
-        .border(if (selected) 2.dp else 1.dp, if (selected) ink.ink else (canvasColor(n.color) ?: ink.line2), shape)
-        .pointerInput(n.id) { detectTapGestures(onTap = { onSelect() }) }
-        .pointerInput(n.id) { detectDragGestures(onDragStart = { onPick() }, onDragEnd = onMoved) { ch, d -> ch.consume(); n.x += d.x / dens; n.y += d.y / dens } }) {
-        when (n.type) {
-            "text" -> if (editing) {
-                val fr = remember { FocusRequester() }
-                LaunchedEffect(Unit) { fr.requestFocus() }
-                BasicTextField(n.text, onText, Modifier.fillMaxSize().padding(12.dp).focusRequester(fr), textStyle = TextStyle(color = ink.ink, fontSize = 16.sp, lineHeight = 22.sp), cursorBrush = SolidColor(ink.ink))
-            } else Text(n.text, Modifier.padding(12.dp), color = ink.ink, fontSize = 16.sp, lineHeight = 22.sp, overflow = TextOverflow.Clip)
-            "file" -> {
-                val img = n.file.substringAfterLast('.').lowercase() in setOf("png", "jpg", "jpeg", "gif", "webp", "bmp", "avif", "heic")
-                if (img) AsyncImage(E.file(n.file), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                else Text("📄 " + n.file.substringAfterLast('/'), Modifier.padding(12.dp), color = ink.ink)
+    val isImg = n.type == "file" && n.file.substringAfterLast('.').lowercase() in setOf("png", "jpg", "jpeg", "gif", "webp", "bmp", "avif", "heic")
+    Box(Modifier.offset(n.x.dp, n.y.dp).size(n.w.dp, n.h.dp)) {
+        Box(Modifier.fillMaxSize().clip(shape)
+            .background(canvasColor(n.color)?.copy(alpha = if (n.type == "group") .06f else .14f)?.compositeOver(ink.card) ?: if (n.type == "group") ink.bg.copy(alpha = 0f) else ink.card)
+            .border(if (selected) 2.dp else 1.dp, if (selected) ink.ink else (canvasColor(n.color) ?: ink.line2), shape)
+            .pointerInput(n.id) { detectTapGestures(onTap = { onSelect() }) }
+            .pointerInput(n.id, editing) { if (!editing) detectDragGestures(onDragStart = { onPick() }, onDragEnd = onMoved) { ch, d -> ch.consume(); n.x += d.x / dens; n.y += d.y / dens } }) {
+            when (n.type) {
+                "text" -> if (editing) {
+                    val fr = remember { FocusRequester() }
+                    LaunchedEffect(Unit) { fr.requestFocus() }
+                    BasicTextField(tfv, onText, Modifier.fillMaxSize().padding(12.dp).focusRequester(fr), textStyle = TextStyle(color = ink.ink, fontSize = 15.sp, lineHeight = 21.sp, fontFamily = Mono), cursorBrush = SolidColor(ink.ink))
+                } else Text(renderMd(n.text, ink.ink, ink.mute), Modifier.padding(12.dp), color = ink.ink, fontSize = 16.sp, lineHeight = 22.sp, overflow = TextOverflow.Clip)
+                "file" -> {
+                    if (isImg) AsyncImage(E.file(n.file), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                    else Text("📄 " + n.file.substringAfterLast('/'), Modifier.padding(12.dp), color = ink.ink)
+                }
+                "link" -> Text("🔗 " + n.obj.optString("url"), Modifier.padding(12.dp), color = ink.ink, fontSize = 13.sp)
+                "group" -> Text(n.obj.optString("label").uppercase(), Modifier.padding(10.dp), color = ink.mute, fontSize = 11.sp, letterSpacing = 1.4.sp)
             }
-            "link" -> Text("🔗 " + n.obj.optString("url"), Modifier.padding(12.dp), color = ink.ink, fontSize = 13.sp)
-            "group" -> Text(n.obj.optString("label").uppercase(), Modifier.padding(10.dp), color = ink.mute, fontSize = 11.sp, letterSpacing = 1.4.sp)
         }
-        if (selected) Box(Modifier.align(Alignment.BottomEnd).size(30.dp)
-            .pointerInput(n.id) { detectDragGestures(onDragEnd = onMoved) { ch, d -> ch.consume(); n.w = (n.w + d.x / dens).coerceAtLeast(80f); n.h = (n.h + d.y / dens).coerceAtLeast(50f) } }) {
-            Canvas(Modifier.fillMaxSize().padding(8.dp)) { drawLine(ink.ink, Offset(size.width, 0f), Offset(0f, size.height), 2.dp.toPx()); drawLine(ink.ink, Offset(size.width, size.height * .5f), Offset(size.width * .5f, size.height), 2.dp.toPx()) }
+        // resize: drag the corner (images keep their shape)
+        if (selected && !editing) {
+            val hs = (40f / k).coerceIn(30f, 140f)
+            Box(Modifier.align(Alignment.BottomEnd).offset((hs * .35f).dp, (hs * .35f).dp).size(hs.dp)
+                .pointerInput(n.id, isImg) { detectDragGestures(onDragEnd = onMoved) { ch, d -> ch.consume()
+                    val nw = (n.w + d.x / dens).coerceAtLeast(60f)
+                    if (isImg) { val r = n.h / n.w; n.w = nw; n.h = nw * r } else { n.w = nw; n.h = (n.h + d.y / dens).coerceAtLeast(40f) }
+                } }, contentAlignment = Alignment.Center) {
+                Box(Modifier.size((hs * .42f).dp).clip(RoundedCornerShape(4.dp)).background(ink.ink).border(1.dp, ink.bg, RoundedCornerShape(4.dp)))
+            }
         }
+    }
+}
+
+/** Markdown the way Obsidian shows it on a canvas card: headings, bold, italic, strike, ==highlight==, `code`, lists, checkboxes. */
+fun renderMd(src: String, ink: Color, mute: Color): androidx.compose.ui.text.AnnotatedString = androidx.compose.ui.text.buildAnnotatedString {
+    val lines = src.split("\n")
+    lines.forEachIndexed { li, raw ->
+        var line = raw
+        var style: androidx.compose.ui.text.SpanStyle? = null
+        val h = Regex("^(#{1,6})\\s+").find(line)
+        if (h != null) { val lv = h.groupValues[1].length; line = line.substring(h.range.last + 1)
+            style = androidx.compose.ui.text.SpanStyle(fontSize = when (lv) { 1 -> 26.sp; 2 -> 21.sp; 3 -> 18.sp; else -> 16.sp }, fontWeight = if (lv <= 2) FontWeight.Light else FontWeight.SemiBold, fontFamily = Display) }
+        Regex("^(\\s*)[-*] \\[( |x|X)\\] ").find(line)?.let { m -> line = line.substring(m.range.last + 1); append(m.groupValues[1] + if (m.groupValues[2] == " ") "☐ " else "☑ ") }
+            ?: Regex("^(\\s*)[-*+] ").find(line)?.let { m -> line = line.substring(m.range.last + 1); append(m.groupValues[1] + "•  ") }
+            ?: Regex("^(\\s*)(\\d+)\\. ").find(line)?.let { m -> line = line.substring(m.range.last + 1); append(m.groupValues[1] + m.groupValues[2] + ".  ") }
+        if (line.startsWith("> ")) { line = line.removePrefix("> "); style = (style ?: androidx.compose.ui.text.SpanStyle()).merge(androidx.compose.ui.text.SpanStyle(color = mute, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)); append("▎ ") }
+        val start = length
+        val tok = Regex("(\\*\\*|__)(.+?)\\1|(\\*|_)(.+?)\\3|~~(.+?)~~|==(.+?)==|`(.+?)`")
+        var i = 0
+        for (m in tok.findAll(line)) {
+            append(line.substring(i, m.range.first))
+            val g = m.groupValues
+            val (txt, sp) = when {
+                g[2].isNotEmpty() -> g[2] to androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold)
+                g[4].isNotEmpty() -> g[4] to androidx.compose.ui.text.SpanStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+                g[5].isNotEmpty() -> g[5] to androidx.compose.ui.text.SpanStyle(textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough, color = mute)
+                g[6].isNotEmpty() -> g[6] to androidx.compose.ui.text.SpanStyle(background = Color(0x66E0DE71))
+                else -> g[7] to androidx.compose.ui.text.SpanStyle(fontFamily = Mono, background = mute.copy(alpha = .18f))
+            }
+            withStyle(sp) { append(txt) }
+            i = m.range.last + 1
+        }
+        append(line.substring(i))
+        style?.let { addStyle(it, start, length) }
+        if (li < lines.size - 1) append("\n")
+    }
+}
+
+/** Formatting for the card being edited: wraps the selection (or toggles the line prefix). */
+@Composable
+fun FormatBar(v: androidx.compose.ui.text.input.TextFieldValue, modifier: Modifier, set: (androidx.compose.ui.text.input.TextFieldValue) -> Unit) {
+    val ink = LocalInk.current
+    fun wrap(m: String) {
+        val a = v.selection.min; val b = v.selection.max; val t = v.text
+        if (a >= m.length && t.length >= b + m.length && t.substring(a - m.length, a) == m && t.substring(b, b + m.length) == m)
+            set(androidx.compose.ui.text.input.TextFieldValue(t.removeRange(b, b + m.length).removeRange(a - m.length, a), androidx.compose.ui.text.TextRange(a - m.length, b - m.length)))
+        else set(androidx.compose.ui.text.input.TextFieldValue(t.substring(0, a) + m + t.substring(a, b) + m + t.substring(b), androidx.compose.ui.text.TextRange(a + m.length, b + m.length)))
+    }
+    fun prefix(p: String) {
+        val t = v.text; val ls = t.lastIndexOf('\n', (v.selection.min - 1).coerceAtLeast(0)).let { if (it < 0 || v.selection.min == 0) 0 else it + 1 }
+        val strip = Regex("^(#{1,6} |- \\[[ xX]\\] |[-*+] |> |\\d+\\. )")
+        val line = t.substring(ls); val cur = strip.find(line)?.value ?: ""
+        val nl = if (cur == p) "" else p
+        val nt = t.substring(0, ls) + nl + t.substring(ls + cur.length)
+        val d = nl.length - cur.length
+        set(androidx.compose.ui.text.input.TextFieldValue(nt, androidx.compose.ui.text.TextRange((v.selection.start + d).coerceAtLeast(ls), (v.selection.end + d).coerceAtLeast(ls))))
+    }
+    Row(modifier.clip(RoundedCornerShape(50)).background(ink.card).border(1.dp, ink.line, RoundedCornerShape(50)).horizontalScroll(androidx.compose.foundation.rememberScrollState()).padding(horizontal = 6.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        @Composable fun B(label: String, st: androidx.compose.ui.text.SpanStyle = androidx.compose.ui.text.SpanStyle(), on: () -> Unit) =
+            Text(androidx.compose.ui.text.buildAnnotatedString { withStyle(st) { append(label) } }, Modifier.clip(RoundedCornerShape(50)).pointerInput(v) { detectTapGestures { on() } }.padding(horizontal = 11.dp, vertical = 8.dp), color = ink.ink, fontSize = 15.sp)
+        B("H1", androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.SemiBold)) { prefix("# ") }
+        B("H2", androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.SemiBold)) { prefix("## ") }
+        B("B", androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold)) { wrap("**") }
+        B("I", androidx.compose.ui.text.SpanStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)) { wrap("*") }
+        B("S", androidx.compose.ui.text.SpanStyle(textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough)) { wrap("~~") }
+        B("H", androidx.compose.ui.text.SpanStyle(background = Color(0x66E0DE71))) { wrap("==") }
+        B("</>", androidx.compose.ui.text.SpanStyle(fontFamily = Mono)) { wrap("`") }
+        B("•") { prefix("- ") }
+        B("1.") { prefix("1. ") }
+        B("☐") { prefix("- [ ] ") }
+        B("❝") { prefix("> ") }
     }
 }

@@ -136,6 +136,7 @@ fun openEntry(ctx: Context, ui: UiState, e: Entry) {
     val a = e.app
     if (a == null) { ui.go(e.key.removePrefix("sec:")); ui.homeTick++; return }
     val prefs = ui.prefs
+    ui.noteLaunch(e.key)
     if (ui.mindful.contains(a.pkg) && prefs.passUntil(a.pkg) < System.currentTimeMillis() && !com.stoa.app.Watch.running) { ui.pauseFor = a; return }
     Apps.launch(ctx, a)
 }
@@ -321,7 +322,11 @@ fun Drawer(open: Boolean, close: () -> Unit) {
     val secs = all.filter { it.app == null }
     val results = remember(q, all) { if (q.isBlank()) emptyList() else all.mapNotNull { e -> matchScore(e.label, q)?.let { e to it } }.sortedWith(compareBy<Pair<Entry, Int>> { it.second }.thenBy { it.first.label.length }).map { it.first } }
     val notes = remember(q, E.mdPaths) { if (q.trim().length > 1) E.searchNotes(q.trim()).take(6) else emptyList() }
-    fun launch(e: Entry) { openEntry(ctx, ui, e); if (e.app != null) close() }
+    fun launch(e: Entry) { if (q.isNotBlank() && e.app != null) ui.noteSearched(e.key); openEntry(ctx, ui, e); if (e.app != null) close() }
+    val byKey = remember(apps) { apps.associateBy { it.key } }
+    val recentE = remember(open, ui.recent, byKey) { ui.recent.mapNotNull { byKey[it] }.take(2) }
+    val topE = remember(open, ui.searched, byKey, recentE) { ui.searched.entries.filter { it.value > 0 }.sortedByDescending { it.value }.mapNotNull { byKey[it.key] }.filter { it !in recentE }.take(4) }
+    val head = (if (recentE.isNotEmpty()) 1 + recentE.size else 0) + (if (topE.isNotEmpty()) 1 + topE.size else 0) + (if (recentE.isNotEmpty() || topE.isNotEmpty()) 1 else 0)
     fun go() { results.firstOrNull()?.let { launch(it) } ?: notes.firstOrNull()?.let { close(); Apps.openInObsidian(ctx, E.vaultName, it) } }
     val list = rememberLazyListState()
     val dim = Color(0x80FFFFFF); val mono = TextStyle(fontFamily = Mono, color = dim, fontSize = 11.sp, letterSpacing = 1.4.sp)
@@ -342,7 +347,14 @@ fun Drawer(open: Boolean, close: () -> Unit) {
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             LazyColumn(Modifier.fillMaxSize().padding(end = if (q.isBlank()) 22.dp else 0.dp), state = list, contentPadding = PaddingValues(bottom = 30.dp)) {
-                if (q.isBlank()) items(apps, key = { it.key }) { e -> DrawerRow(e, Modifier.animateItem()) { menu = e } }
+                if (q.isBlank()) {
+                    if (recentE.isNotEmpty()) { item(key = "h-recent") { Text("RECENT", Modifier.padding(top = 4.dp, bottom = 2.dp), style = mono) }
+                        items(recentE, key = { "rc" + it.key }) { e -> DrawerRow(e, Modifier.animateItem()) { menu = e } } }
+                    if (topE.isNotEmpty()) { item(key = "h-top") { Text("MOST SEARCHED", Modifier.padding(top = 12.dp, bottom = 2.dp), style = mono) }
+                        items(topE, key = { "ms" + it.key }) { e -> DrawerRow(e, Modifier.animateItem()) { menu = e } } }
+                    if (recentE.isNotEmpty() || topE.isNotEmpty()) item(key = "h-all") { Text("ALL APPS", Modifier.padding(top = 12.dp, bottom = 2.dp), style = mono) }
+                    items(apps, key = { it.key }) { e -> DrawerRow(e, Modifier.animateItem()) { menu = e } }
+                }
                 else {
                     itemsIndexed(results, key = { _, e -> "r" + e.key }) { i, e -> DrawerRow(e, Modifier.animateItem(), first = i == 0) { menu = e } }
                     if (notes.isNotEmpty()) item(key = "notes-h") { Text("NOTES", Modifier.padding(top = 18.dp, bottom = 6.dp), style = mono) }
@@ -356,15 +368,17 @@ fun Drawer(open: Boolean, close: () -> Unit) {
                 }
             }
             if (q.isBlank() && apps.isNotEmpty()) {
-                val letters = remember(apps) { apps.map { it.label.firstOrNull()?.uppercaseChar()?.takeIf { c -> c.isLetter() } ?: '#' }.distinct() }
+                val letters = remember(apps, head) { (if (head > 0) listOf('★') else emptyList()) + ('A'..'Z').toList() + '#' }
                 var active by remember { mutableStateOf<Char?>(null) }
                 val scope = rememberCoroutineScope()
                 fun jump(c: Char) {
                     if (c == active) return; active = c; haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    val idx = apps.indexOfFirst { (it.label.firstOrNull()?.uppercaseChar()?.takeIf { x -> x.isLetter() } ?: '#') == c }
-                    if (idx >= 0) scope.launch { list.scrollToItem(idx) }
+                    if (c == '★') { scope.launch { list.scrollToItem(0) }; return }
+                    fun l0(e: Entry) = e.label.firstOrNull()?.uppercaseChar()?.takeIf { x -> x in 'A'..'Z' } ?: '#'
+                    val idx = if (c == '#') apps.indexOfFirst { l0(it) == '#' } else apps.indexOfFirst { l0(it) != '#' && l0(it) >= c }.let { if (it < 0) apps.size - 1 else it }
+                    if (idx >= 0) scope.launch { list.scrollToItem(idx + head) }
                 }
-                BoxWithConstraints(Modifier.align(Alignment.CenterEnd).width(22.dp).fillMaxHeight(.86f)) {
+                BoxWithConstraints(Modifier.align(Alignment.CenterEnd).offset(x = 12.dp).width(30.dp).fillMaxHeight()) {
                     val hPx = constraints.maxHeight.toFloat().coerceAtLeast(1f)
                     fun at(y: Float) = letters[((y / hPx) * letters.size).toInt().coerceIn(0, letters.size - 1)]
                     Column(Modifier.fillMaxSize().pointerInput(letters) {

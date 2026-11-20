@@ -31,11 +31,11 @@ data class Layout(
     fun toJson(): String {
         fun arr(l: List<Pair<String, Boolean>>) = JSONArray(l.map { JSONArray(listOf(it.first, it.second)) })
         return JSONObject().put("tabs", arr(tabs)).put("home", arr(home)).put("today", arr(today)).put("todaySections", arr(todaySections))
-            .put("notes", arr(notes)).put("dock", JSONArray(dock)).put("quick", arr(quick)).put("v", 2).toString()
+            .put("notes", arr(notes)).put("dock", JSONArray(dock)).put("quick", arr(quick)).put("v", 3).toString()
     }
     companion object {
         val DEFAULT = Layout(
-            listOf("home", "today", "almanac", "notes").map { it to true },
+            listOf("home", "today", "notes", "almanac").map { it to true },
             HOME_WIDGETS.keys.map { it to true },
             listOf("today", "reading", "still", "writing").map { it to true },
             TODAY_SECTIONS.keys.map { it to true },
@@ -51,8 +51,11 @@ data class Layout(
                 def.forEachIndexed { i, d -> if (out.none { it.first == d.first }) out.add(minOf(i, out.size), d) }   // new widgets appear where they belong
                 return out
             }
+            val v = j.optInt("v", 1)
             val dock = j.optJSONArray("dock")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: DEFAULT.dock
-            return Layout(list("tabs", DEFAULT.tabs), list("home", DEFAULT.home), list("today", DEFAULT.today), list("todaySections", DEFAULT.todaySections), list("notes", DEFAULT.notes), dock, list("quick", DEFAULT.quick))
+            var tabs = list("tabs", DEFAULT.tabs)
+            if (v < 3) tabs = tabs.filter { it.first != "almanac" } + tabs.filter { it.first == "almanac" }   // Almanac moves to the end
+            return Layout(tabs, list("home", DEFAULT.home), list("today", DEFAULT.today), list("todaySections", DEFAULT.todaySections), list("notes", DEFAULT.notes), dock, list("quick", DEFAULT.quick))
         }
     }
 }
@@ -87,6 +90,11 @@ class UiState(val prefs: Prefs) {
     var dockCollapsed by mutableStateOf(prefs.bool("dock_collapsed", false))
     var dock by mutableStateOf(loadDock())
     var openFolder by mutableStateOf<String?>(null)
+    /** Last-opened apps and how often each was opened from a search, for the top of the drawer. */
+    var recent by mutableStateOf(prefs.jsonArr("recent_apps")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList())
+    var searched by mutableStateOf(prefs.json("searched_apps")?.let { j -> j.keys().asSequence().associateWith { j.optInt(it) } } ?: emptyMap())
+    fun noteLaunch(key: String) { recent = (listOf(key) + recent.filter { it != key }).take(8); prefs.put("recent_apps", JSONArray(recent).toString()) }
+    fun noteSearched(key: String) { searched = searched + (key to (searched[key] ?: 0) + 1); prefs.put("searched_apps", JSONObject(searched as Map<*, *>).toString()) }
     var iconPack by mutableStateOf(prefs.str("icon_pack", ""))
     var greyIcons by mutableStateOf(prefs.bool("grey_icons", true))
     private fun loadDock(): List<DockItem> {
