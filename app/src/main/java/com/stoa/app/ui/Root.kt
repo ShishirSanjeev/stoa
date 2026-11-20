@@ -311,8 +311,8 @@ fun AppMenu(e: Entry, dismiss: () -> Unit) {
         }
         e.app?.let { a ->
             val m = ui.mindful.contains(a.pkg)
-            MenuItem(if (m) "Stop pausing before ${a.label}" else "Pause & breathe before ${a.label}") { ui.setMindful(if (m) ui.mindful - a.pkg else ui.mindful + a.pkg); dismiss() }
-            MenuItem("Hide from drawer") { ui.setHidden(ui.hidden + a.pkg); dismiss() }
+            MenuItem(if (m) "Stop pausing before ${a.label}" else "Pause & breathe before ${a.label}") { ui.updateMindful(if (m) ui.mindful - a.pkg else ui.mindful + a.pkg); dismiss() }
+            MenuItem("Hide from drawer") { ui.updateHidden(ui.hidden + a.pkg); dismiss() }
             MenuItem("App info") { Apps.appInfo(ctx, a.pkg); dismiss() }
         }
     }

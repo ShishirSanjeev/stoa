@@ -148,16 +148,16 @@ fun MindfulEditor() {
         (if (showAll || q.isNotBlank()) list else list.take(12)).forEach { a ->
             Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(a.label, Modifier.weight(1f), color = ink.ink)
-                if (ui.hidden.contains(a.pkg)) Pill("Unhide", { ui.setHidden(ui.hidden - a.pkg) }, small = true)
+                if (ui.hidden.contains(a.pkg)) Pill("Unhide", { ui.updateHidden(ui.hidden - a.pkg) }, small = true)
                 Spacer(Modifier.width(8.dp))
-                Toggle(ui.mindful.contains(a.pkg)) { v -> ui.setMindful(if (v) ui.mindful + a.pkg else ui.mindful - a.pkg) }
+                Toggle(ui.mindful.contains(a.pkg)) { v -> ui.updateMindful(if (v) ui.mindful + a.pkg else ui.mindful - a.pkg) }
             }
         }
         if (!showAll && q.isBlank() && list.size > 12) Pill("Show all ${list.size} apps", { showAll = true }, Modifier.padding(top = 6.dp), small = true)
         if (ui.hidden.isNotEmpty()) {
             Kicker("Hidden from the drawer", Modifier.padding(top = 14.dp))
             ui.apps.filter { ui.hidden.contains(it.pkg) }.forEach { a -> Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(a.label, Modifier.weight(1f), color = ink.ink); Pill("Unhide", { ui.setHidden(ui.hidden - a.pkg) }, small = true) } }
+                Text(a.label, Modifier.weight(1f), color = ink.ink); Pill("Unhide", { ui.updateHidden(ui.hidden - a.pkg) }, small = true) } }
         }
     }
 }

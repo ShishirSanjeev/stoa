@@ -69,8 +69,8 @@ class UiState(val prefs: Prefs) {
     var hidden by mutableStateOf(prefs.hidden)
     var mindful by mutableStateOf(prefs.mindful)
     fun saveLayout(l: Layout) { layout = l; prefs.put("layout", l.toJson()) }
-    fun setHidden(s: Set<String>) { hidden = s; prefs.hidden = s }
-    fun setMindful(s: Set<String>) { mindful = s; prefs.mindful = s }
+    fun updateHidden(s: Set<String>) { hidden = s; prefs.hidden = s }
+    fun updateMindful(s: Set<String>) { mindful = s; prefs.mindful = s }
     fun go(key: String) {
         val t = SECTION_TAB[key]
         if (t == null) { tab = key; return }
