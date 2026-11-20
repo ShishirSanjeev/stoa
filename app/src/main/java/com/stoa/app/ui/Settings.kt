@@ -143,6 +143,7 @@ fun LayoutEditor() {
         LayoutGroup("Today tab", L.today, SECTIONS + ("today" to "Today")) { ui.saveLayout(ui.layout.copy(today = it)) }
         LayoutGroup("Today · sections", L.todaySections, TODAY_SECTIONS) { ui.saveLayout(ui.layout.copy(todaySections = it)) }
         LayoutGroup("Notes tab", L.notes, SECTIONS) { ui.saveLayout(ui.layout.copy(notes = it)) }
+        LayoutGroup("Almanac", L.almanac, ALMANAC_WIDGETS) { ui.saveLayout(ui.layout.copy(almanac = it)) }
     }
 }
 

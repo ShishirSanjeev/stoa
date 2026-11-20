@@ -1,5 +1,6 @@
 package com.stoa.app.ui
 
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -64,17 +65,20 @@ fun AlmanacPage() {
     val ws = weekStartIdx(dayIdx(E.today()), mon) - 7 * back
     val keys = (0 until 7).map { keyOfIdx(ws + it) }
     val fmt = DateTimeFormatter.ofPattern("d MMM")
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).statusBarsPadding().padding(horizontal = 16.dp).padding(top = 10.dp, bottom = 28.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).statusBarsPadding().navigationBarsPadding().padding(horizontal = 16.dp).padding(top = 10.dp, bottom = 28.dp)) {
         H1("Almanac")
         Row(verticalAlignment = Alignment.CenterVertically) {
             Kicker((if (back == 0) "This week · " else if (back == 1) "Last week · " else "") + LocalDate.parse(keys[0]).format(fmt) + " – " + LocalDate.parse(keys[6]).format(fmt), Modifier.weight(1f))
             IconBtn(Icons.Outlined.ChevronLeft, "Previous week", { back++ }, size = 18.dp)
             IconBtn(Icons.Outlined.ChevronRight, "Next week", { if (back > 0) back-- }, tint = if (back > 0) ink.mute else ink.faint, size = 18.dp)
         }
-        Balance(ws)
-        BioMetrics(keys)
-        RoutineWeek(keys)
-        ClippedThisWeek(keys)
+        val ui = LocalUi.current
+        for (w in ui.layout.on(ui.layout.almanac)) when (w) {
+            "balance" -> Balance(ws)
+            "bio" -> BioMetrics(keys)
+            "routines" -> RoutineWeek(keys)
+            "clips" -> ClippedThisWeek(keys)
+        }
     }
 }
 

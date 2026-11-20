@@ -125,7 +125,9 @@ fun CanvasEditor(rel: String) {
     suspend fun saveNow() = withContext(Dispatchers.IO) { try { E.file(rel).writeText(json()) } catch (e: Exception) { } }
     LaunchedEffect(dirty) { if (dirty > 0) { delay(500); saveNow() } }
     fun close() { scope.launch { saveNow(); ui.canvas = null } }
-    fun fit() {
+    fun sane() { if (!k.isFinite() || k <= 0f) k = 1f; if (!tx.isFinite()) tx = 0f; if (!ty.isFinite()) ty = 0f }
+    fun fit() { fitRaw(); sane() }
+    fun fitRaw() {
         if (nodes.isEmpty()) { k = 1f; tx = size.x / 2; ty = size.y / 3; return }
         val x0 = nodes.minOf { it.x }; val y0 = nodes.minOf { it.y }; val x1 = nodes.maxOf { it.x + it.w }; val y1 = nodes.maxOf { it.y + it.h }
         k = minOf((size.x - 60) / ((x1 - x0) * dens), (size.y - 60) / ((y1 - y0) * dens)).coerceIn(.15f, 1.4f)
@@ -180,7 +182,7 @@ fun CanvasEditor(rel: String) {
             Box(Modifier.graphicsLayer { translationX = tx; translationY = ty; scaleX = k; scaleY = k; transformOrigin = TransformOrigin(0f, 0f) }) {
                 val byId = nodes.associateBy { it.id }
                 val lineC = ink.mute
-                Canvas(Modifier.size(1.dp)) {
+                Canvas(Modifier.size(1.dp)) { try {
                     fun arrow(to: Offset, from: Offset, c: Color) {
                         val ang = kotlin.math.atan2(to.y - from.y, to.x - from.x); val L = 11.dp.toPx()
                         val p = androidx.compose.ui.graphics.Path().apply {
@@ -204,7 +206,7 @@ fun CanvasEditor(rel: String) {
                         if (e.optString("fromEnd", "none") == "arrow") arrow(p1, c1, c)
                     }
                     linking?.let { id -> byId[id]?.let { a -> drawRoundRect(lineC, Offset(a.x - 6, a.y - 6) * density, androidx.compose.ui.geometry.Size(a.w + 12, a.h + 12) * density, androidx.compose.ui.geometry.CornerRadius(16 * density), style = androidx.compose.ui.graphics.drawscope.Stroke(1.5f * density, pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(12f, 9f)))) } }
-                }
+                } catch (t: Throwable) { android.util.Log.e("Stoa", "canvas draw", t) } }
                 fun connect(from: String, to: CNode) {
                     val f = nodes.firstOrNull { it.id == from } ?: return
                     val ex = edges.firstOrNull { (it.optString("fromNode") == from && it.optString("toNode") == to.id) || (it.optString("fromNode") == to.id && it.optString("toNode") == from) }

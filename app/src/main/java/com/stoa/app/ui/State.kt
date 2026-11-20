@@ -19,19 +19,21 @@ val SECTIONS = linkedMapOf(
 val SECTION_TAB = mapOf("reading" to "today", "still" to "today", "writing" to "today", "tasks" to "notes", "ideas" to "notes", "canvas" to "notes", "shots" to "notes", "gym" to "notes")
 val HOME_WIDGETS = linkedMapOf("level" to "Level & XP", "screen" to "Usage graph", "three" to "Today's three", "search" to "Search", "capture" to "Capture an idea", "seren" to "Serendipity", "due" to "Due soon")
 val QUICK = linkedMapOf("idea" to "Idea", "task" to "Task", "daily" to "Daily note", "read" to "Read", "still" to "Breathe", "gym" to "Lift", "canvas" to "Canvas", "shots" to "Shots", "search" to "Search", "sync" to "Sync")
+val ALMANAC_WIDGETS = linkedMapOf("balance" to "Weekly balance", "bio" to "Bio-metrics", "routines" to "Routines", "clips" to "Clipped this week")
 val TODAY_SECTIONS = linkedMapOf("three" to "Today's three", "routines" to "Routines", "habits" to "Habits", "projects" to "Projects")
 
 /** What's shown and in which order. Device-local; edited from Settings → Layout. */
 data class Layout(
     val tabs: List<Pair<String, Boolean>>, val home: List<Pair<String, Boolean>>, val today: List<Pair<String, Boolean>>,
     val todaySections: List<Pair<String, Boolean>>, val notes: List<Pair<String, Boolean>>, val dock: List<String>,
-    val quick: List<Pair<String, Boolean>> = QUICK.keys.map { it to (it != "canvas" && it != "task") }
+    val quick: List<Pair<String, Boolean>> = QUICK.keys.map { it to (it != "canvas" && it != "task") },
+    val almanac: List<Pair<String, Boolean>> = ALMANAC_WIDGETS.keys.map { it to true }
 ) {
     fun on(list: List<Pair<String, Boolean>>) = list.filter { it.second }.map { it.first }
     fun toJson(): String {
         fun arr(l: List<Pair<String, Boolean>>) = JSONArray(l.map { JSONArray(listOf(it.first, it.second)) })
         return JSONObject().put("tabs", arr(tabs)).put("home", arr(home)).put("today", arr(today)).put("todaySections", arr(todaySections))
-            .put("notes", arr(notes)).put("dock", JSONArray(dock)).put("quick", arr(quick)).put("v", 3).toString()
+            .put("notes", arr(notes)).put("dock", JSONArray(dock)).put("quick", arr(quick)).put("almanac", arr(almanac)).put("v", 3).toString()
     }
     companion object {
         val DEFAULT = Layout(
@@ -55,7 +57,7 @@ data class Layout(
             val dock = j.optJSONArray("dock")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: DEFAULT.dock
             var tabs = list("tabs", DEFAULT.tabs)
             if (v < 3) tabs = tabs.filter { it.first != "almanac" } + tabs.filter { it.first == "almanac" }   // Almanac moves to the end
-            return Layout(tabs, list("home", DEFAULT.home), list("today", DEFAULT.today), list("todaySections", DEFAULT.todaySections), list("notes", DEFAULT.notes), dock, list("quick", DEFAULT.quick))
+            return Layout(tabs, list("home", DEFAULT.home), list("today", DEFAULT.today), list("todaySections", DEFAULT.todaySections), list("notes", DEFAULT.notes), dock, list("quick", DEFAULT.quick), list("almanac", DEFAULT.almanac))
         }
     }
 }
