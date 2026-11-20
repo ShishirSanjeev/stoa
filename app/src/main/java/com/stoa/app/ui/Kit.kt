@@ -29,13 +29,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.horizontalScroll
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -160,7 +161,8 @@ fun CheckRow(checked: Boolean, text: String, onToggle: (Boolean) -> Unit, lead: 
             on = !on; bumps++; haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onToggle(on)
         }.padding(vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.scale(sc.value).size(23.dp).clip(RoundedCornerShape(8.dp)).background(boxBg).border(1.5.dp, if (on) ink.ink else ink.faint, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
-                AnimatedVisibility(on, enter = scaleIn(spring(dampingRatio = .45f)) + fadeIn(), exit = fadeOut(tween(120))) { Icon(Icons.Outlined.Check, null, Modifier.size(15.dp), tint = ink.inv) }
+                val tickA by animateFloatAsState(if (on) 1f else 0f, spring(dampingRatio = .45f, stiffness = 600f), label = "tick")
+                Icon(Icons.Outlined.Check, null, Modifier.size(15.dp).graphicsLayer { alpha = tickA.coerceIn(0f, 1f); scaleX = .4f + .6f * tickA; scaleY = .4f + .6f * tickA }, tint = ink.inv)
             }
             Spacer(Modifier.width(12.dp))
             if (lead.isNotEmpty()) Text("$lead ", fontSize = 15.sp)
