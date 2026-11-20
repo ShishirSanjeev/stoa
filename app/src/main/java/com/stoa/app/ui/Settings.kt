@@ -135,10 +135,9 @@ fun LayoutEditor() {
     val ui = LocalUi.current
     val L = ui.layout
     StoaCard("Layout") {
-        Muted("Show, hide and re-order what Stoa shows. Long-press any app in the drawer to add it to the dock.", size = 12)
+        Muted("Show, hide and re-order what Stoa shows. Long-press any app in the drawer to pin it to Home.", size = 12)
         LayoutGroup("Tabs", L.tabs, SECTIONS) { ui.saveLayout(ui.layout.copy(tabs = it)) }
         LayoutGroup("Home widgets", L.home, HOME_WIDGETS) { ui.saveLayout(ui.layout.copy(home = it)) }
-        LayoutGroup("Quick shortcuts", L.quick, QUICK) { ui.saveLayout(ui.layout.copy(quick = it)) }
         LayoutGroup("Today tab", L.today, SECTIONS + ("today" to "Today")) { ui.saveLayout(ui.layout.copy(today = it)) }
         LayoutGroup("Today · sections", L.todaySections, TODAY_SECTIONS) { ui.saveLayout(ui.layout.copy(todaySections = it)) }
         LayoutGroup("Notes tab", L.notes, SECTIONS) { ui.saveLayout(ui.layout.copy(notes = it)) }

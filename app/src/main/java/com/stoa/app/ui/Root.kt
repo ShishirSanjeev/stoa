@@ -405,11 +405,6 @@ fun AppMenu(e: Entry, dismiss: () -> Unit) {
     Sheet(e.label, dismiss) {
         val pinned = ui.pins.contains(e.key)
         MenuItem(if (pinned) "Unpin from Home" else "Pin to Home") { ui.togglePin(e.key); dismiss() }
-        val inDock = ui.layout.dock.contains(e.key)
-        MenuItem(if (inDock) "Remove from dock" else "Add to dock") {
-            val d = if (inDock) ui.layout.dock - e.key else (ui.layout.dock + e.key).takeLast(4)
-            ui.saveLayout(ui.layout.copy(dock = d)); dismiss()
-        }
         e.app?.let { a ->
             val m = ui.mindful.contains(a.pkg)
             MenuItem(if (m) "Stop pausing before ${a.label}" else "Pause & breathe before ${a.label}") { ui.updateMindful(if (m) ui.mindful - a.pkg else ui.mindful + a.pkg); dismiss() }
