@@ -1,5 +1,7 @@
 package com.stoa.app.ui
 
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.ui.input.pointer.pointerInput
@@ -170,7 +172,7 @@ fun UsageGraph() {
         val total = hours.sum()
         Column(Modifier.pointerInput(Unit) {
             var acc = 0f
-            androidx.compose.foundation.gestures.detectHorizontalDragGestures(onDragStart = { acc = 0f }, onDragEnd = {
+            detectHorizontalDragGestures(onDragStart = { acc = 0f }, onDragEnd = {
                 if (acc > 60f && back < 27) back++ else if (acc < -60f && back > 0) back--
             }) { ch, d -> ch.consume(); acc += d }
         }) {
