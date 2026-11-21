@@ -1,3 +1,4 @@
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 package com.stoa.app.ui
 
 import androidx.compose.ui.text.font.FontWeight
@@ -114,7 +115,9 @@ fun CanvasEditor(rel: String) {
     val nodes = remember(rel) { mutableStateListOf<CNode>().apply { val a = root.optJSONArray("nodes") ?: JSONArray(); for (i in 0 until a.length()) a.optJSONObject(i)?.let { add(CNode(it)) } } }
     val edges = remember(rel) { mutableStateListOf<JSONObject>().apply { val a = root.optJSONArray("edges") ?: JSONArray(); for (i in 0 until a.length()) a.optJSONObject(i)?.let { add(it) } } }
     var linking by remember { mutableStateOf<String?>(null) }   // tap ○, then tap the card to connect
-    var tfv by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue("")) }
+    // the new text-field state API: the old TextFieldValue field crashes inside the zoomed canvas (Compose IME bug)
+    val tfs = remember { androidx.compose.foundation.text.input.TextFieldState() }
+    fun startEdit(n: CNode) { tfs.setTextAndPlaceCursorAtEnd(n.text); editing = n.id }
     var sel by remember { mutableStateOf<String?>(null) }
     var editing by remember { mutableStateOf<String?>(null) }
     var tx by remember { mutableFloatStateOf(0f) }; var ty by remember { mutableFloatStateOf(0f) }; var k by remember { mutableFloatStateOf(1f) }
@@ -134,7 +137,7 @@ fun CanvasEditor(rel: String) {
     }
     fun fit() { fitRaw(); sane() }
     fun centre() = Offset((size.x / 2 - tx) / k / dens, (size.y / 2 - ty) / k / dens)
-    fun addText(at: Offset) { val n = CNode(JSONObject().put("type", "text").put("text", "").put("x", (at.x - 130).toInt()).put("y", (at.y - 60).toInt()).put("width", 260).put("height", 120)); nodes.add(n); sel = n.id; tfv = androidx.compose.ui.text.input.TextFieldValue(""); editing = n.id; dirty++ }
+    fun addText(at: Offset) { val n = CNode(JSONObject().put("type", "text").put("text", "").put("x", (at.x - 130).toInt()).put("y", (at.y - 60).toInt()).put("width", 260).put("height", 120)); nodes.add(n); sel = n.id; startEdit(n); dirty++ }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
@@ -213,14 +216,14 @@ fun CanvasEditor(rel: String) {
                     if (ex != null) edges.remove(ex) else edges.add(JSONObject().put("id", hex16()).put("fromNode", from).put("fromSide", side(f, to)).put("toNode", to.id).put("toSide", side(to, f)).put("toEnd", "arrow"))
                     dirty++
                 }
-                nodes.sortedBy { if (it.type == "group") 0 else 1 }.forEach { n -> NodeView(n, sel == n.id, editing == n.id, dens, k, tfv,
+                nodes.sortedBy { if (it.type == "group") 0 else 1 }.forEach { n -> NodeView(n, sel == n.id, editing == n.id, dens, k, tfs,
                     onSelect = {
                         val l = linking
                         if (l != null) { if (l != n.id) connect(l, n); linking = null }
-                        else if (sel == n.id && n.type == "text") { tfv = androidx.compose.ui.text.input.TextFieldValue(n.text, androidx.compose.ui.text.TextRange(n.text.length)); editing = n.id }
+                        else if (sel == n.id && n.type == "text") { startEdit(n) }
                         else { sel = n.id; if (editing != n.id) editing = null }
                     },
-                    onPick = { if (sel != n.id) { sel = n.id; editing = null } }, onMoved = { dirty++ }, onText = { tfv = it; n.text = it.text; dirty++ }) }
+                    onPick = { if (sel != n.id) { sel = n.id; editing = null } }, onMoved = { dirty++ }) }
                 // tap the little circle, then tap another card to connect (again to disconnect)
                 nodes.firstOrNull { it.id == sel }?.takeIf { editing == null }?.let { n ->
                     val hs = (34f / k).coerceIn(28f, 120f)
@@ -241,7 +244,13 @@ fun CanvasEditor(rel: String) {
                         .pointerInput(c, cur.id) { detectTapGestures { cur.color = c; dirty++ } })
                 }
             }
-            if (cur != null && editing == cur.id) FormatBar(tfv, Modifier.align(Alignment.BottomCenter).padding(bottom = 64.dp)) { tfv = it; cur.text = it.text; dirty++ }
+            LaunchedEffect(editing) {
+                val id = editing ?: return@LaunchedEffect
+                androidx.compose.runtime.snapshotFlow { tfs.text.toString() }.collect { t -> nodes.firstOrNull { it.id == id }?.let { n -> if (n.text != t) { n.text = t; dirty++ } } }
+            }
+            if (cur != null && editing == cur.id) FormatBar(androidx.compose.ui.text.input.TextFieldValue(tfs.text.toString(), tfs.selection), Modifier.align(Alignment.BottomCenter).padding(bottom = 64.dp)) { v ->
+                tfs.edit { replace(0, length, v.text); selection = v.selection }
+            }
             Text(when { linking != null -> "Now tap the card to connect to · tap again to disconnect"; editing != null -> "Select text, then format"; cur != null -> "Tap ○ to connect · drag the corner to resize · tap again to edit"; else -> "Double-tap to type · drag cards · pinch to zoom" }, Modifier.align(Alignment.BottomCenter).padding(bottom = 22.dp).clip(RoundedCornerShape(50)).background(ink.card).border(1.dp, ink.line, RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 6.dp),
                 fontSize = 12.sp, color = ink.mute)
         }
@@ -249,8 +258,8 @@ fun CanvasEditor(rel: String) {
 }
 
 @Composable
-fun NodeView(n: CNode, selected: Boolean, editing: Boolean, dens: Float, k: Float, tfv: androidx.compose.ui.text.input.TextFieldValue,
-             onSelect: () -> Unit, onPick: () -> Unit, onMoved: () -> Unit, onText: (androidx.compose.ui.text.input.TextFieldValue) -> Unit) {
+fun NodeView(n: CNode, selected: Boolean, editing: Boolean, dens: Float, k: Float, tfs: androidx.compose.foundation.text.input.TextFieldState,
+             onSelect: () -> Unit, onPick: () -> Unit, onMoved: () -> Unit) {
     val E = LocalEngine.current; val ink = LocalInk.current
     val shape = RoundedCornerShape(12.dp)
     val isImg = n.type == "file" && n.file.substringAfterLast('.').lowercase() in setOf("png", "jpg", "jpeg", "gif", "webp", "bmp", "avif", "heic")
@@ -264,7 +273,7 @@ fun NodeView(n: CNode, selected: Boolean, editing: Boolean, dens: Float, k: Floa
                 "text" -> if (editing) {
                     val fr = remember { FocusRequester() }
                     LaunchedEffect(Unit) { fr.requestFocus() }
-                    BasicTextField(tfv, onText, Modifier.fillMaxSize().padding(12.dp).focusRequester(fr), textStyle = TextStyle(color = ink.ink, fontSize = 15.sp, lineHeight = 21.sp, fontFamily = Mono), cursorBrush = SolidColor(ink.ink))
+                    BasicTextField(state = tfs, modifier = Modifier.fillMaxSize().padding(12.dp).focusRequester(fr), textStyle = TextStyle(color = ink.ink, fontSize = 15.sp, lineHeight = 21.sp, fontFamily = Mono), cursorBrush = SolidColor(ink.ink))
                 } else Text(renderMd(n.text, ink.ink, ink.mute), Modifier.padding(12.dp), color = ink.ink, fontSize = 16.sp, lineHeight = 22.sp, overflow = TextOverflow.Clip)
                 "file" -> {
                     if (isImg) AsyncImage(E.file(n.file), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
