@@ -1,5 +1,7 @@
 package com.stoa.app.ui
 
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -136,22 +138,46 @@ fun HomePage(nest: NestedScrollConnection) {
 }
 
 /** Today's screen time by hour — a quiet bar chart. */
+/** Hours for a day: live for today, the daily note's screen_hours for earlier days, else Android's usage history. */
+suspend fun hoursFor(ctx: android.content.Context, E: com.stoa.app.vault.Engine, day: LocalDate): IntArray {
+    if (day == LocalDate.now()) return withContext(Dispatchers.IO) { Apps.hourlyUsage(ctx, day) }
+    E.days[day.toString()]?.screenHours?.takeIf { it.size == 24 }?.let { return it.toIntArray() }
+    return withContext(Dispatchers.IO) { Apps.hourlyUsage(ctx, day) }
+}
+
+fun fmtMin(m: Int) = if (m >= 60) "${m / 60}h ${m % 60}m" else "${m}m"
+
 @Composable
 fun UsageGraph() {
-    val ctx = LocalContext.current; val ui = LocalUi.current; val ink = LocalInk.current
+    val ctx = LocalContext.current; val ui = LocalUi.current; val ink = LocalInk.current; val E = LocalEngine.current
     var tick by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) { while (true) { delay(300_000); tick++ } }
+    var back by remember { mutableIntStateOf(0) }
+    LaunchedEffect(ui.homeTick) { back = 0 }
+    val day = LocalDate.now().minusDays(back.toLong())
     val has = remember(ui.resume) { Apps.hasUsage(ctx) }
-    val hours by produceState(IntArray(24), ui.resume, tick) { value = withContext(Dispatchers.IO) { Apps.hourlyUsage(ctx) } }
+    val hours by produceState(IntArray(24), ui.resume, tick, back, E.days[day.toString()]?.screenHours) { value = hoursFor(ctx, E, day) }
     val grow by androidx.compose.animation.core.animateFloatAsState(if (hours.sum() > 0) 1f else 0f, tween(900), label = "grow")
-    val now = LocalTime.now().hour
-    StoaCard("Screen time") {
+    val now = if (back == 0) LocalTime.now().hour else -1
+    StoaCard("Screen time", action = {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconBtn(Icons.Outlined.ChevronLeft, "Previous day", { if (back < 27) back++ }, size = 18.dp)
+            Text(when (back) { 0 -> "TODAY"; 1 -> "YESTERDAY"; else -> day.format(DateTimeFormatter.ofPattern("EEE d MMM")).uppercase() }, fontFamily = Mono, fontSize = 10.sp, letterSpacing = 1.2.sp, color = ink.mute)
+            IconBtn(Icons.Outlined.ChevronRight, "Next day", { if (back > 0) back-- }, tint = if (back > 0) ink.mute else ink.faint, size = 18.dp)
+        }
+    }) {
         if (!has) { Muted("Allow usage access to see your day's screen time.", size = 13); Spacer(Modifier.height(8.dp)); Pill("Allow usage access", { Apps.askUsage(ctx) }, small = true); return@StoaCard }
         val total = hours.sum()
+        Column(Modifier.pointerInput(Unit) {
+            var acc = 0f
+            androidx.compose.foundation.gestures.detectHorizontalDragGestures(onDragStart = { acc = 0f }, onDragEnd = {
+                if (acc > 60f && back < 27) back++ else if (acc < -60f && back > 0) back--
+            }) { ch, d -> ch.consume(); acc += d }
+        }) {
         Row(verticalAlignment = Alignment.Bottom) {
-            Text(if (total >= 60) "${total / 60}h ${total % 60}m" else "${total}m", fontFamily = Display, fontWeight = FontWeight.Light, fontSize = 30.sp, color = ink.ink, modifier = Modifier.weight(1f))
+            Text(fmtMin(total), fontFamily = Display, fontWeight = FontWeight.Light, fontSize = 30.sp, color = ink.ink, modifier = Modifier.weight(1f))
             val peak = hours.indices.maxByOrNull { hours[it] } ?: 0
-            if (total > 0) Kicker("peak ${"%02d".format(peak)}:00 · ${ui.prefs.resisted(LocalDate.now().toString())} resisted")
+            if (total > 0) Kicker("peak ${"%02d".format(peak)}:00 · ${ui.prefs.resisted(day.toString())} resisted")
         }
         Spacer(Modifier.height(10.dp))
         val barC = ink.ink; val dimC = ink.line2; val faint = ink.faint
@@ -167,6 +193,7 @@ fun UsageGraph() {
             }
         }
         Row(Modifier.fillMaxWidth().padding(top = 8.dp)) { listOf("00", "06", "12", "18", "24").forEachIndexed { i, l -> Text(l, Modifier.weight(1f), fontFamily = Mono, fontSize = 9.sp, color = ink.faint, textAlign = if (i == 4) androidx.compose.ui.text.style.TextAlign.End else androidx.compose.ui.text.style.TextAlign.Start) } }
+        }
     }
 }
 

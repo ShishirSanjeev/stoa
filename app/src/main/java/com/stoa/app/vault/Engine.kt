@@ -137,6 +137,17 @@ class Engine(private val ctx: Context) {
         if (r.endsWith(".md")) rescanOne(r)
         bump(); r
     }
+    /** Screen time for a day → daily note frontmatter: screen_time (minutes) and screen_hours (24 comma-separated minutes, midnight first). */
+    suspend fun saveScreenTime(date: LocalDate, hours: IntArray, create: Boolean) {
+        if (root == null) return
+        val key = date.toString(); val list = hours.toList(); val total = list.sum()
+        val have = days[key]
+        if (have != null && have.screenHours == list && have.screenMin == total) return
+        val rel = if (create) ensureDaily(date) else dailyRel(date).takeIf { exists(it) } ?: return
+        modify(rel) { txt -> Frontmatter.update(txt) { fm -> fm["screen_time"] = total; fm["screen_hours"] = list.joinToString(",") } }
+        putDay(key, (days[key] ?: Day()).copy(screenMin = total, screenHours = list))
+    }
+
     suspend fun ensureDaily(date: LocalDate = LocalDate.now()): String {
         val rel = dailyRel(date)
         if (!exists(rel)) {
@@ -173,7 +184,8 @@ class Engine(private val ctx: Context) {
             val (done, present) = scanHabits(text, habitHeading.trimStart('#').trim(), habits)
             day = Day(done, present, fm["morning_routine"].asList().toSet(), fm["evening_routine"].asList().toSet(),
                 fm["routines_complete"].asList().map { it.lowercase() }.toSet(), fm["reading_minutes"].asInt() ?: 0, fm["meditation_minutes"].asInt() ?: 0,
-                scanWorkouts(text, workoutHeading.trimStart('#').trim()))
+                scanWorkouts(text, workoutHeading.trimStart('#').trim()),
+                fm["screen_time"].asInt() ?: -1, fm["screen_hours"]?.toString()?.split(',')?.mapNotNull { it.trim().toIntOrNull() }?.takeIf { it.size == 24 } ?: emptyList())
         } else if (rel.startsWith(workoutsFolder.trim('/') + "/")) {
             val sp = Frontmatter.split(text); val fm = sp.fm
             val date = fm["date"]?.toString()?.take(10) ?: Instant.ofEpochMilli(mtime).atZone(ZoneId.systemDefault()).toLocalDate().toString()

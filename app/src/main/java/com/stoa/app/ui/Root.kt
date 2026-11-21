@@ -205,6 +205,18 @@ fun Root() {
             ui.tab != "home" -> ui.tab = "home"
         }
     }
+    // keep screen time in the daily notes: today on every return to Stoa, plus the past week if missing or unfinished
+    LaunchedEffect(ui.resume, E.ready) {
+        if (!E.ready || !Apps.hasUsage(ctx)) return@LaunchedEffect
+        for (d in 0..7) {
+            val day = java.time.LocalDate.now().minusDays(d.toLong())
+            val have = E.days[day.toString()]
+            if (d >= 2 && have != null && have.screenHours.size == 24) continue
+            val h = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { Apps.hourlyUsage(ctx, day) }
+            if (h.sum() == 0 && d > 0) continue
+            try { E.saveScreenTime(day, h, create = d == 0) } catch (e: Exception) { }
+        }
+    }
     // pull down on Home → notification shade
     val homeNest = remember {
         object : NestedScrollConnection {

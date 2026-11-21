@@ -13,7 +13,8 @@ data class Workout(val name: String, val meta: String, val ex: List<WEx>)
 data class Day(
     val done: Set<String> = emptySet(), val present: Set<String> = emptySet(),
     val morning: Set<String> = emptySet(), val evening: Set<String> = emptySet(), val complete: Set<String> = emptySet(),
-    val readMin: Int = 0, val medMin: Int = 0, val workouts: List<Workout> = emptyList()
+    val readMin: Int = 0, val medMin: Int = 0, val workouts: List<Workout> = emptyList(),
+    val screenMin: Int = -1, val screenHours: List<Int> = emptyList()
 )
 
 data class Area(

@@ -74,6 +74,7 @@ fun AlmanacPage() {
         val ui = LocalUi.current
         for (w in ui.layout.on(ui.layout.almanac)) when (w) {
             "balance" -> Balance(ws)
+            "screen" -> WeekScreen(keys)
             "bio" -> BioMetrics(keys)
             "routines" -> RoutineWeek(keys)
             "clips" -> ClippedThisWeek(keys)
@@ -194,6 +195,52 @@ private fun ClippedThisWeek(keys: List<String>) {
                 Text(rel.substringAfterLast('/').removeSuffix(".md"), Modifier.weight(1f), fontSize = 15.sp, color = ink.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
             if (i < minOf(clips.size, 20) - 1) Divider()
+        }
+    }
+}
+
+/** Screen time across the week, one bar a day (from the daily notes, or Android's history if not saved yet). */
+@Composable
+private fun WeekScreen(keys: List<String>) {
+    val E = LocalEngine.current; val ui = LocalUi.current; val ctx = androidx.compose.ui.platform.LocalContext.current; val ink = LocalInk.current
+    val today = LocalDate.now().toString()
+    val mins by androidx.compose.runtime.produceState(IntArray(7), keys, ui.resume, E.days) {
+        value = IntArray(7) { i ->
+            val k = keys[i]
+            when {
+                k > today -> -1
+                k != today && (E.days[k]?.screenMin ?: -1) >= 0 -> E.days[k]!!.screenMin
+                else -> hoursFor(ctx, E, LocalDate.parse(k)).sum()
+            }
+        }
+    }
+    val known = mins.filter { it >= 0 }
+    val total = known.sum(); val avg = if (known.isEmpty()) 0 else total / known.size
+    StoaCard("Screen time", action = { Text(fmtMin(avg) + " / day", fontFamily = Mono, fontSize = 11.sp, letterSpacing = 1.sp, color = ink.mute) }) {
+        Text(fmtMin(total), fontFamily = Display, fontWeight = FontWeight.Light, fontSize = 30.sp, color = ink.ink)
+        Spacer(Modifier.height(12.dp))
+        val grow by animateFloatAsState(if (total > 0) 1f else 0f, spring(dampingRatio = .8f, stiffness = 120f), label = "wk")
+        val barC = ink.ink; val dimC = ink.line2
+        Canvas(Modifier.fillMaxWidth().height(110.dp)) {
+            val n = 7; val gap = 14.dp.toPx(); val w = (size.width - gap * (n - 1)) / n
+            val mx = maxOf(60, mins.maxOrNull() ?: 0).toFloat()
+            // average line
+            if (avg > 0) { val y = size.height - avg / mx * size.height; drawLine(dimC, Offset(0f, y), Offset(size.width, y), 1.dp.toPx(), pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(6f, 6f))) }
+            for (i in 0 until n) {
+                val x = i * (w + gap)
+                drawRoundRect(dimC, Offset(x, size.height - 2.dp.toPx()), androidx.compose.ui.geometry.Size(w, 2.dp.toPx()), androidx.compose.ui.geometry.CornerRadius(1.dp.toPx()))
+                val m = mins[i]; if (m <= 0) continue
+                val h = m / mx * size.height * grow
+                drawRoundRect(if (keys[i] == today) barC else barC.copy(alpha = .55f), Offset(x, size.height - h), androidx.compose.ui.geometry.Size(w, h), androidx.compose.ui.geometry.CornerRadius(3.dp.toPx()))
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            keys.forEachIndexed { i, k ->
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(LocalDate.parse(k).format(DateTimeFormatter.ofPattern("EEEEE")), fontFamily = Mono, fontSize = 10.sp, color = if (k == today) ink.ink else ink.mute)
+                    Text(if (mins[i] > 0) (if (mins[i] >= 60) "${mins[i] / 60}h" else "${mins[i]}m") else "–", fontFamily = Mono, fontSize = 9.sp, color = ink.faint)
+                }
+            }
         }
     }
 }

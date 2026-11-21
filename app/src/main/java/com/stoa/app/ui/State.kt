@@ -19,7 +19,7 @@ val SECTIONS = linkedMapOf(
 val SECTION_TAB = mapOf("reading" to "today", "still" to "today", "writing" to "today", "tasks" to "notes", "ideas" to "notes", "canvas" to "notes", "shots" to "notes", "gym" to "notes")
 val HOME_WIDGETS = linkedMapOf("level" to "Level & XP", "screen" to "Usage graph", "three" to "Today's three", "search" to "Search", "capture" to "Capture an idea", "seren" to "Serendipity", "due" to "Due soon")
 val QUICK = linkedMapOf("idea" to "Idea", "task" to "Task", "daily" to "Daily note", "read" to "Read", "still" to "Breathe", "gym" to "Lift", "canvas" to "Canvas", "shots" to "Shots", "search" to "Search", "sync" to "Sync")
-val ALMANAC_WIDGETS = linkedMapOf("balance" to "Weekly balance", "bio" to "Bio-metrics", "routines" to "Routines", "clips" to "Clipped this week")
+val ALMANAC_WIDGETS = linkedMapOf("balance" to "Weekly balance", "screen" to "Screen time", "bio" to "Bio-metrics", "routines" to "Routines", "clips" to "Clipped this week")
 val TODAY_SECTIONS = linkedMapOf("three" to "Today's three", "routines" to "Routines", "habits" to "Habits", "projects" to "Projects")
 
 /** What's shown and in which order. Device-local; edited from Settings → Layout. */

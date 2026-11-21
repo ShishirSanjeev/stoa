@@ -67,11 +67,12 @@ object Apps {
     fun webSearch(ctx: Context, q: String) = openUrl(ctx, "https://www.google.com/search?q=" + Uri.encode(q))
 
     /** Minutes of screen time in each hour of today (index 0 = midnight), from app-in-front events. */
-    fun hourlyUsage(ctx: Context): IntArray {
+    fun hourlyUsage(ctx: Context, day: LocalDate = LocalDate.now()): IntArray {
         val out = IntArray(24)
         if (!hasUsage(ctx)) return out
         val um = ctx.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-        val start = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(); val now = System.currentTimeMillis()
+        val start = day.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val now = minOf(System.currentTimeMillis(), day.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli())
         val ev = um.queryEvents(start, now); val e = android.app.usage.UsageEvents.Event()
         val ms = LongArray(24); var openPkg: String? = null; var openAt = 0L
         fun add(a: Long, b: Long) { var t = a; while (t < b) { val h = ((t - start) / 3_600_000L).toInt().coerceIn(0, 23); val end = minOf(b, start + (h + 1) * 3_600_000L); ms[h] += end - t; t = end } }
