@@ -117,9 +117,9 @@ fun CanvasEditor(rel: String) {
     var linking by remember { mutableStateOf<String?>(null) }   // tap ○, then tap the card to connect
     // the new text-field state API: the old TextFieldValue field crashes inside the zoomed canvas (Compose IME bug)
     val tfs = remember { androidx.compose.foundation.text.input.TextFieldState() }
-    fun startEdit(n: CNode) { tfs.setTextAndPlaceCursorAtEnd(n.text); editing = n.id }
     var sel by remember { mutableStateOf<String?>(null) }
     var editing by remember { mutableStateOf<String?>(null) }
+    fun startEdit(n: CNode) { tfs.edit { replace(0, length, n.text); selection = androidx.compose.ui.text.TextRange(n.text.length) }; editing = n.id }
     var tx by remember { mutableFloatStateOf(0f) }; var ty by remember { mutableFloatStateOf(0f) }; var k by remember { mutableFloatStateOf(1f) }
     var dirty by remember { mutableIntStateOf(0) }
     var size by remember { mutableStateOf(Offset(1080f, 1800f)) }
