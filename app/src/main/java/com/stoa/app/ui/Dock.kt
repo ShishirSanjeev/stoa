@@ -363,8 +363,8 @@ fun PageStrip() {
                                 else -> { ui.goSub(cur, k); open = null }
                             }
                         }, contentAlignment = Alignment.Center) {
-                        Text(if (back) "‹" else label.uppercase(), fontFamily = Mono, fontSize = if (back) 18.sp else if (cur == null) 13.sp else 11.5.sp,
-                            letterSpacing = if (cur == null) 2.sp else 1.2.sp, color = if (cur == null) ink.ink else ink.ink.copy(alpha = .85f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(if (back) "‹" else label.uppercase(), fontFamily = Mono, fontSize = if (back) 16.sp else if (cur == null) 10.5.sp else 9.5.sp,
+                            letterSpacing = if (cur == null) 1.8.sp else 1.1.sp, color = if (cur == null) ink.ink else ink.ink.copy(alpha = .85f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }

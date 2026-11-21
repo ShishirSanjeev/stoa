@@ -109,7 +109,7 @@ fun HomePage(nest: NestedScrollConnection) {
             Text("  ·  " + ui.homeName.uppercase(), fontFamily = Mono, fontSize = 10.sp, letterSpacing = 1.8.sp, color = ink.mute, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(LocalDate.now().format(DateTimeFormatter.ofPattern("EEE d MMM")).uppercase(), fontFamily = Mono, fontSize = 13.sp, letterSpacing = 1.4.sp, color = ink.mute)
             Spacer(Modifier.width(4.dp))
-            IconBtn(Icons.Outlined.Tune, "Settings & layout", { ui.settings = true }, size = 18.dp)
+            IconBtn(Icons.Outlined.Tune, "Settings & layout", { ui.settings = true }, tint = LocalInk.current.ink, size = 26.dp)
         }
         Text(time.format(DateTimeFormatter.ofPattern("HH:mm")), fontFamily = Display, fontWeight = FontWeight.ExtraLight, fontSize = 72.sp, lineHeight = 76.sp, letterSpacing = (-2).sp, color = ink.ink)
         SyncLine()
