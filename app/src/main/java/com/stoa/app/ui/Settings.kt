@@ -1,5 +1,9 @@
 package com.stoa.app.ui
 
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
 import android.net.Uri
 import android.os.Environment
 import android.provider.DocumentsContract
@@ -74,10 +78,47 @@ fun SettingsScreen() {
     val r = ui.resume + ver
     val notifAsk = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ver++ }
     val tree = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri -> uri?.let { treeToPath(it) }?.let { path = it; p.vaultPath = it; E.scan(true); ver++ } }
+    var page by remember { mutableStateOf<String?>(null) }
+    androidx.activity.compose.BackHandler(page != null) { page = null }
+    val pages = listOf(
+        "setup" to ("Set up" to "Permissions, your vault, mindful pause"),
+        "home" to ("Home" to "Name, greetings, gestures"),
+        "look" to ("Look" to "Wallpaper, dock and icon packs"),
+        "layout" to ("Layout" to "Tabs, Home widgets, Today, Notes, Almanac"),
+        "mindful" to ("Mindful pause" to "Apps that get a breathing pause"),
+        "vault" to ("Notes & folders" to "Where Stoa reads and writes in your vault"),
+        "about" to ("About" to "Build, crash log")
+    )
     Box(Modifier.fillMaxSize().background(ink.bg)) {
+      androidx.compose.animation.AnimatedContent(page, label = "settings", transitionSpec = {
+          val fwd = targetState != null
+          (fadeIn(androidx.compose.animation.core.tween(200)) + androidx.compose.animation.slideInHorizontally { if (fwd) it / 5 else -it / 5 }) togetherWith
+              (fadeOut(androidx.compose.animation.core.tween(120)) + androidx.compose.animation.slideOutHorizontally { if (fwd) -it / 5 else it / 5 })
+      }) { cur ->
         Page {
-            Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.weight(1f)) { H1("Settings") }; IconBtn(Icons.Outlined.Close, "Close", { ui.settings = false }, tint = ink.ink) }
-            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (cur != null) IconBtn(Icons.AutoMirrored.Outlined.ArrowBack, "Back", { page = null }, tint = ink.ink)
+                Text(if (cur == null) "Settings" else pages.first { it.first == cur }.second.first, Modifier.weight(1f).padding(start = if (cur != null) 6.dp else 0.dp), fontFamily = Display, fontWeight = FontWeight.Light, fontSize = if (cur == null) 34.sp else 28.sp, color = ink.ink)
+                IconBtn(Icons.Outlined.Close, "Close", { ui.settings = false }, tint = ink.ink)
+            }
+            Spacer(Modifier.height(12.dp))
+            if (cur == null) {
+                pages.forEach { (k, ts) ->
+                    Row(Modifier.fillMaxWidth().clickable { page = k }.padding(vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) { Text(ts.first, color = ink.ink, fontSize = 19.sp, fontFamily = Display); Muted(ts.second, size = 13) }
+                        Text("›", color = ink.mute, fontSize = 22.sp)
+                    }
+                    Divider()
+                }
+                Muted("Stoa · build ${try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName } catch (e: Exception) { "" }}", Modifier.padding(top = 16.dp), 11)
+                return@Page
+            }
+            if (cur == "home") { HomeSettings(); GestureSettings() }
+            if (cur == "look") { WallpaperSettings(); DockSettings() }
+            if (cur == "layout") LayoutEditor()
+            if (cur == "mindful") MindfulEditor()
+            if (cur == "about") { CrashCard(); StoaCard("Build") { Muted("Version ${try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName } catch (e: Exception) { "" }} · updates come from the “latest” release on GitHub.", size = 13) } }
+            if (cur == "setup") {
             StoaCard("Set up") {
                 val all = remember(r) { Apps.hasAllFiles(ctx) }; val home = remember(r) { Apps.isDefaultHome(ctx) }
                 val ovl = remember(r) { Apps.hasOverlay(ctx) }; val notif = remember(r) { Apps.hasNotifications(ctx) }; val use = remember(r) { Apps.hasUsage(ctx) }; val img = remember(r) { hasImages(ctx) }
@@ -97,13 +138,8 @@ fun SettingsScreen() {
                 if (E.error != null) Muted(E.error ?: "", Modifier.padding(top = 8.dp), 13)
                 else if (E.ready) Muted("Reading ${E.mdPaths.size} notes from ${E.vaultName}.", Modifier.padding(top = 8.dp), 12)
             }
-            HomeSettings()
-            WallpaperSettings()
-            DockSettings()
-            CrashCard()
-            LayoutEditor()
-            MindfulEditor()
-            StoaCard("Notes & folders") {
+            }
+            if (cur == "vault") StoaCard("Notes & folders") {
                 Muted("Paths are relative to the vault.", size = 12)
                 listOf("bookNote" to ("Book note" to E.bookNote), "writingFolder" to ("Writing folder" to E.writingFolder), "writingPrefix" to ("Writing prefix" to E.writingPrefix),
                     "captureFolder" to ("Quick capture folder" to E.capture), "clippingsFolder" to ("Web clippings folder" to E.clippings), "inboxPath" to ("Inbox note (/task)" to E.inbox),
@@ -119,6 +155,27 @@ fun SettingsScreen() {
                 Pill("Re-read the vault", { E.scan(true) }, Modifier.padding(top = 14.dp), small = true)
             }
         }
+      }
+    }
+}
+
+@Composable
+fun GestureSettings() {
+    val ui = LocalUi.current; val ctx = LocalContext.current; val ink = LocalInk.current; val p = ui.prefs
+    var ver by remember { mutableIntStateOf(0) }
+    val admin = remember(ui.resume, ver) { com.stoa.app.LockAdmin.active(ctx) }
+    StoaCard("Gestures") {
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) { Text("Swipe down for notifications", color = ink.ink); Muted("Anywhere on Home, when it's scrolled to the top.", size = 12) }
+            Toggle(ui.gSwipeDown) { ui.gSwipeDown = it; p.put("g_swipe_down", it) }
+        }
+        Divider()
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) { Text("Double-tap to lock", color = ink.ink); Muted(if (admin) "On empty space on Home." else "Needs Stoa as a device admin (lock the screen only).", size = 12) }
+            Toggle(ui.gDoubleLock && admin) { v -> if (v && !admin) com.stoa.app.LockAdmin.ask(ctx); ui.gDoubleLock = v; p.put("g_double_lock", v); ver++ }
+        }
+        if (admin) Pill("Remove device admin", { com.stoa.app.LockAdmin.remove(ctx); ver++ }, Modifier.padding(top = 6.dp), small = true)
+        Muted("Android may ask for your PIN instead of fingerprint after a double-tap lock — that's how Android treats apps that lock the screen.", Modifier.padding(top = 8.dp), 11)
     }
 }
 

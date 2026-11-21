@@ -1,5 +1,6 @@
 package com.stoa.app.ui
 
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.animation.shrinkVertically
@@ -217,6 +218,11 @@ fun Root() {
     }
     Box(Modifier.fillMaxSize().background(ink.bg)) {
         if (ui.wpOn) WallpaperLayer()
+        // the drawer darkens the same wallpaper as you swipe toward it, instead of sliding a black page in
+        Box(Modifier.fillMaxSize().drawBehind {
+            val f = (1f - (pager.currentPage + pager.currentPageOffsetFraction)).coerceIn(0f, 1f)
+            if (f > 0f) drawRect(Color.Black, alpha = .82f * f)
+        })
         Column(Modifier.fillMaxSize()) {
             AnimatedVisibility(pager.targetPage != 0, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) { BottomNav(tabs, pager) }
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().then(if (pager.targetPage != 0) Modifier.consumeWindowInsets(WindowInsets.statusBars) else Modifier)) {
@@ -225,9 +231,9 @@ fun Root() {
                     val p = pages[i]
                     // a gentle depth effect while paging
                     val off = (pager.currentPage - i) + pager.currentPageOffsetFraction
-                    Box(Modifier.fillMaxSize().graphicsLayer { val f = kotlin.math.abs(off).coerceIn(0f, 1f); alpha = 1f - f * .35f; scaleX = 1f - f * .04f; scaleY = 1f - f * .04f }) {
+                    Box(Modifier.fillMaxSize().graphicsLayer { val f = kotlin.math.abs(off).coerceIn(0f, 1f); alpha = if (p == "drawer") 1f - f else 1f - f * .35f; scaleX = 1f - f * .04f; scaleY = 1f - f * .04f }) {
                         when (p) {
-                            "drawer" -> Box(Modifier.fillMaxSize().background(Color.Black)) { Drawer(pager.targetPage == 0) { ui.tab = "home" } }
+                            "drawer" -> Box(Modifier.fillMaxSize()) { Drawer(pager.targetPage == 0) { ui.tab = "home" } }
                             "today" -> TodayPage()
                             "almanac" -> AlmanacPage()
                             "notes" -> NotesPage()

@@ -192,3 +192,20 @@ object IconPacks {
 
 /** Needed only so Android lets Stoa read what Spotify is playing (Notification access). */
 class MediaListener : android.service.notification.NotificationListenerService()
+
+/** Device admin used only to lock the screen (double-tap on Home). */
+class LockAdmin : android.app.admin.DeviceAdminReceiver() {
+    companion object {
+        private fun comp(ctx: Context) = ComponentName(ctx, LockAdmin::class.java)
+        private fun dpm(ctx: Context) = ctx.getSystemService(Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager
+        fun active(ctx: Context) = try { dpm(ctx).isAdminActive(comp(ctx)) } catch (e: Exception) { false }
+        fun ask(ctx: Context) = try {
+            ctx.startActivity(Intent(android.app.admin.DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
+                .putExtra(android.app.admin.DevicePolicyManager.EXTRA_DEVICE_ADMIN, comp(ctx))
+                .putExtra(android.app.admin.DevicePolicyManager.EXTRA_ADD_EXPLANATION, "Lets you double-tap Home to lock the screen. Stoa uses nothing else.")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: Exception) { }
+        fun remove(ctx: Context) = try { dpm(ctx).removeActiveAdmin(comp(ctx)) } catch (e: Exception) { }
+        fun lock(ctx: Context) { if (active(ctx)) try { dpm(ctx).lockNow() } catch (e: Exception) { } else ask(ctx) }
+    }
+}

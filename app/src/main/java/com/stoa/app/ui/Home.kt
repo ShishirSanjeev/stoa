@@ -1,5 +1,8 @@
 package com.stoa.app.ui
 
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.background
@@ -86,8 +89,8 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
 @Composable
-fun Page(nest: NestedScrollConnection? = null, content: @Composable () -> Unit) {
-    Column(Modifier.fillMaxSize().then(if (nest != null) Modifier.nestedScroll(nest) else Modifier).verticalScroll(rememberScrollState())
+fun Page(nest: NestedScrollConnection? = null, scroll: androidx.compose.foundation.ScrollState = rememberScrollState(), content: @Composable () -> Unit) {
+    Column(Modifier.fillMaxSize().then(if (nest != null) Modifier.nestedScroll(nest) else Modifier).verticalScroll(scroll)
         .statusBarsPadding().navigationBarsPadding().padding(horizontal = 16.dp).padding(top = 10.dp, bottom = 28.dp)) { content() }
 }
 
@@ -101,8 +104,9 @@ fun HomePage(nest: NestedScrollConnection) {
     val E = LocalEngine.current; val ui = LocalUi.current; val ink = LocalInk.current
     var time by remember { mutableStateOf(LocalTime.now()) }
     LaunchedEffect(Unit) { while (true) { time = LocalTime.now(); delay(1000L * (60 - time.second).coerceAtLeast(1)) } }
-    Box(Modifier.fillMaxSize()) {
-    Page(nest) {
+    val scroll = rememberScrollState(); val ctx = androidx.compose.ui.platform.LocalContext.current
+    Box(Modifier.fillMaxSize().homeGestures(scroll, ui, ctx)) {
+    Page(null, scroll) {
         // greeting · home name ............ date
         Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(greetingFor(ui.prefs), fontFamily = Display, fontSize = 15.sp, color = ink.ink)
@@ -366,3 +370,42 @@ fun SyncLine(modifier: Modifier = Modifier, light: Boolean = false) {
             fontFamily = Mono, fontSize = 10.sp, letterSpacing = 1.4.sp, color = if (stale && !syncing) ink.warn else base)
     }
 }
+
+/** Home gestures: pull down (from the top of the page) → notification shade; double-tap empty space → lock. */
+fun Modifier.homeGestures(scroll: androidx.compose.foundation.ScrollState, ui: UiState, ctx: android.content.Context): Modifier = this
+    .pointerInput(ui) {
+        // watch (never consume) so taps and scrolls keep working
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+            val atTop = scroll.value == 0
+            var fired = false
+            while (true) {
+                val ev = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                val c = ev.changes.firstOrNull { it.id == down.id } ?: break
+                if (!c.pressed) break
+                val d = c.position - down.position
+                if (!fired && ui.gSwipeDown && atTop && d.y > 70.dp.toPx() && d.y > kotlin.math.abs(d.x) * 1.6f) { fired = true; com.stoa.app.Apps.expandNotifications(ctx) }
+            }
+        }
+    }
+    .pointerInput(ui) {
+        var lastUp = 0L; var lastPos = androidx.compose.ui.geometry.Offset.Zero
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = androidx.compose.ui.input.pointer.PointerEventPass.Final)
+            var up: androidx.compose.ui.input.pointer.PointerInputChange? = null
+            while (true) {
+                val ev = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Final)
+                val c = ev.changes.firstOrNull { it.id == down.id } ?: break
+                if ((c.position - down.position).getDistance() > viewConfiguration.touchSlop) break
+                if (!c.pressed) { up = c; break }
+            }
+            val u = up ?: run { lastUp = 0L; return@awaitEachGesture }
+            // a tap that a button or field already handled doesn't count
+            if (u.isConsumed || down.isConsumed) { lastUp = 0L; return@awaitEachGesture }
+            val now = u.uptimeMillis
+            if (lastUp != 0L && now - lastUp < viewConfiguration.doubleTapTimeoutMillis && (u.position - lastPos).getDistance() < 60.dp.toPx()) {
+                lastUp = 0L
+                if (ui.gDoubleLock) com.stoa.app.LockAdmin.lock(ctx)
+            } else { lastUp = now; lastPos = u.position }
+        }
+    }

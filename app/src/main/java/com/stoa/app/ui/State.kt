@@ -92,6 +92,8 @@ class UiState(val prefs: Prefs) {
     var dockCollapsed by mutableStateOf(prefs.bool("dock_collapsed", false))
     var dock by mutableStateOf(loadDock())
     var openFolder by mutableStateOf<String?>(null)
+    var gSwipeDown by mutableStateOf(prefs.bool("g_swipe_down", true))
+    var gDoubleLock by mutableStateOf(prefs.bool("g_double_lock", false))
     /** Quick shortcuts (drawer row + dock strip): order, with "!" marking hidden ones. */
     var shortcutPrefs by mutableStateOf(prefs.jsonArr("shortcuts")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList())
     fun saveShortcuts(l: List<String>) { shortcutPrefs = l; prefs.put("shortcuts", JSONArray(l).toString()) }
