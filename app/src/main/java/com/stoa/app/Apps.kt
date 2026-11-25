@@ -67,6 +67,26 @@ object Apps {
     fun webSearch(ctx: Context, q: String) = openUrl(ctx, "https://www.google.com/search?q=" + Uri.encode(q))
 
     /** Minutes of screen time in each hour of today (index 0 = midnight), from app-in-front events. */
+    private fun tryStart(ctx: Context, i: Intent): Boolean = try { ctx.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); true } catch (e: Exception) { false }
+    fun openClock(ctx: Context) {
+        tryStart(ctx, Intent(android.provider.AlarmClock.ACTION_SHOW_ALARMS)) ||
+            listOf("com.google.android.deskclock", "com.android.deskclock", "com.sec.android.app.clockpackage", "com.oneplus.deskclock", "com.coloros.alarmclock", "com.nothing.clock")
+                .any { pk -> ctx.packageManager.getLaunchIntentForPackage(pk)?.let { tryStart(ctx, it) } == true }
+    }
+    fun openCalendar(ctx: Context) {
+        val u = android.provider.CalendarContract.CONTENT_URI.buildUpon().appendPath("time").appendPath(System.currentTimeMillis().toString()).build()
+        tryStart(ctx, Intent(Intent.ACTION_VIEW, u)) || tryStart(ctx, Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_CALENDAR))
+    }
+    fun openWellbeing(ctx: Context) {
+        val tries = listOf(
+            Intent().setClassName("com.google.android.apps.wellbeing", "com.google.android.apps.wellbeing.settings.TopLevelSettingsActivity"),
+            Intent().setClassName("com.samsung.android.forest", "com.samsung.android.forest.launcher.LauncherActivity"),
+            Intent("android.settings.DIGITAL_WELLBEING_SETTINGS"))
+        if (tries.any { tryStart(ctx, it) }) return
+        listOf("com.google.android.apps.wellbeing", "com.samsung.android.forest", "com.oplus.healthservice", "com.nothing.wellbeing")
+            .any { pk -> ctx.packageManager.getLaunchIntentForPackage(pk)?.let { tryStart(ctx, it) } == true } || tryStart(ctx, Intent(Settings.ACTION_SETTINGS))
+    }
+
     fun hourlyUsage(ctx: Context, day: LocalDate = LocalDate.now()): IntArray {
         val out = IntArray(24)
         if (!hasUsage(ctx)) return out

@@ -115,11 +115,11 @@ fun HomePage(nest: NestedScrollConnection) {
         Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(greetingFor(ui.prefs), fontFamily = Display, fontSize = 15.sp, color = ink.ink)
             Text("  ·  " + ui.homeName.uppercase(), fontFamily = Mono, fontSize = 10.sp, letterSpacing = 1.8.sp, color = ink.mute, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(LocalDate.now().format(DateTimeFormatter.ofPattern("EEE d MMM")).uppercase(), fontFamily = Mono, fontSize = 13.sp, letterSpacing = 1.4.sp, color = ink.mute)
+            Text(LocalDate.now().format(DateTimeFormatter.ofPattern("EEE d MMM")).uppercase(), Modifier.clip(RoundedCornerShape(6.dp)).clickable { Apps.openCalendar(ctx) }.padding(horizontal = 4.dp, vertical = 6.dp), fontFamily = Mono, fontSize = 13.sp, letterSpacing = 1.4.sp, color = ink.mute)
             Spacer(Modifier.width(4.dp))
             IconBtn(Icons.Outlined.Tune, "Settings & layout", { ui.settings = true }, tint = LocalInk.current.ink, size = 26.dp)
         }
-        Text(time.format(DateTimeFormatter.ofPattern("HH:mm")), fontFamily = Display, fontWeight = FontWeight.ExtraLight, fontSize = 72.sp, lineHeight = 76.sp, letterSpacing = (-2).sp, color = ink.ink)
+        Text(time.format(DateTimeFormatter.ofPattern("HH:mm")), Modifier.clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null) { Apps.openClock(ctx) }, fontFamily = Display, fontWeight = FontWeight.ExtraLight, fontSize = 72.sp, lineHeight = 76.sp, letterSpacing = (-2).sp, color = ink.ink)
         SyncLine()
         Spacer(Modifier.height(6.dp))
         E.error?.let { err -> StoaCard("Set up") { Muted(err, size = 14); Spacer(Modifier.height(10.dp)); Pill("Open settings", { ui.settings = true }, primary = true) } }
@@ -170,7 +170,7 @@ fun UsageGraph() {
     }) {
         if (!has) { Muted("Allow usage access to see your day's screen time.", size = 13); Spacer(Modifier.height(8.dp)); Pill("Allow usage access", { Apps.askUsage(ctx) }, small = true); return@StoaCard }
         val total = hours.sum()
-        Column(Modifier.pointerInput(Unit) {
+        Column(Modifier.clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null) { Apps.openWellbeing(ctx) }.pointerInput(Unit) {
             var acc = 0f
             detectHorizontalDragGestures(onDragStart = { acc = 0f }, onDragEnd = {
                 if (acc > 60f && back < 27) back++ else if (acc < -60f && back > 0) back--

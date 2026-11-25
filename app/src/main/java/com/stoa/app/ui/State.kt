@@ -43,21 +43,24 @@ data class Layout(
             TODAY_SECTIONS.keys.map { it to true },
             listOf("tasks", "ideas", "canvas", "shots", "gym").map { it to true },
             listOf("sec:today", "sec:writing", "sec:gym", "sec:shots"))
+        /** Sub-pages that can live on either Today or Notes. */
+        val SUBS = listOf("today", "reading", "still", "writing", "tasks", "ideas", "canvas", "shots", "gym")
         fun load(p: Prefs): Layout {
             val j = p.json("layout") ?: return DEFAULT
             if (j.optInt("v", 1) < 2) return DEFAULT.copy(dock = DEFAULT.dock)   // new page structure: start from the new order
-            fun list(k: String, def: List<Pair<String, Boolean>>): List<Pair<String, Boolean>> {
-                val a = j.optJSONArray(k) ?: return def
-                val got = (0 until a.length()).mapNotNull { i -> a.optJSONArray(i)?.let { it.optString(0) to it.optBoolean(1, true) } }.filter { g -> def.any { it.first == g.first } }
+            fun raw(k: String) = j.optJSONArray(k)?.let { a -> (0 until a.length()).mapNotNull { i -> a.optJSONArray(i)?.optString(0) } } ?: emptyList()
+            fun list(k: String, def: List<Pair<String, Boolean>>, allowed: List<String> = def.map { it.first }, elsewhere: List<String> = emptyList()): List<Pair<String, Boolean>> {
+                val a = j.optJSONArray(k) ?: return def.filter { it.first !in elsewhere }
+                val got = (0 until a.length()).mapNotNull { i -> a.optJSONArray(i)?.let { it.optString(0) to it.optBoolean(1, true) } }.filter { g -> g.first in allowed }
                 val out = got.toMutableList()
-                def.forEachIndexed { i, d -> if (out.none { it.first == d.first }) out.add(minOf(i, out.size), d) }   // new widgets appear where they belong
+                def.forEachIndexed { i, d -> if (out.none { it.first == d.first } && d.first !in elsewhere) out.add(minOf(i, out.size), d) }   // new widgets appear where they belong
                 return out
             }
             val v = j.optInt("v", 1)
             val dock = j.optJSONArray("dock")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: DEFAULT.dock
             var tabs = list("tabs", DEFAULT.tabs)
             if (v < 3) tabs = tabs.filter { it.first != "almanac" } + tabs.filter { it.first == "almanac" }   // Almanac moves to the end
-            return Layout(tabs, list("home", DEFAULT.home), list("today", DEFAULT.today), list("todaySections", DEFAULT.todaySections), list("notes", DEFAULT.notes), dock, list("quick", DEFAULT.quick), list("almanac", DEFAULT.almanac))
+            return Layout(tabs, list("home", DEFAULT.home), list("today", DEFAULT.today, SUBS, raw("notes")), list("todaySections", DEFAULT.todaySections), list("notes", DEFAULT.notes, SUBS, raw("today")), dock, list("quick", DEFAULT.quick), list("almanac", DEFAULT.almanac))
         }
     }
 }
@@ -144,7 +147,7 @@ class UiState(val prefs: Prefs) {
     fun updateMindful(s: Set<String>) { mindful = s; prefs.mindful = s }
     fun goSub(page: String, sub: String) { if (page == "today") todaySub = sub else if (page == "notes") notesSub = sub; tab = page }
     fun go(key: String) {
-        val t = SECTION_TAB[key]
+        val t = when { layout.today.any { it.first == key } && key != "today" -> "today"; layout.notes.any { it.first == key } -> "notes"; else -> SECTION_TAB[key] }
         if (t == null) { tab = key; return }
         if (t == "today") todaySub = key else notesSub = key
         subPagers[t]?.let { pendingSub = key }

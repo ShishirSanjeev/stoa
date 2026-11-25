@@ -1,5 +1,6 @@
 package com.stoa.app.ui
 
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.fadeOut
@@ -197,9 +198,9 @@ fun LayoutEditor() {
         Muted("Show, hide and re-order what Stoa shows. Long-press any app in the drawer to pin it to Home.", size = 12)
         LayoutGroup("Tabs", L.tabs, SECTIONS) { ui.saveLayout(ui.layout.copy(tabs = it)) }
         LayoutGroup("Home widgets", L.home, HOME_WIDGETS) { ui.saveLayout(ui.layout.copy(home = it)) }
-        LayoutGroup("Today tab", L.today, SECTIONS + ("today" to "Today")) { ui.saveLayout(ui.layout.copy(today = it)) }
+        LayoutGroup("Today tab", L.today, SECTIONS + ("today" to "Today"), moveLabel = "→ Notes", onMove = { k -> val it = L.today.first { p -> p.first == k }; ui.saveLayout(ui.layout.copy(today = L.today - it, notes = L.notes + it)) }) { ui.saveLayout(ui.layout.copy(today = it)) }
         LayoutGroup("Today · sections", L.todaySections, TODAY_SECTIONS) { ui.saveLayout(ui.layout.copy(todaySections = it)) }
-        LayoutGroup("Notes tab", L.notes, SECTIONS) { ui.saveLayout(ui.layout.copy(notes = it)) }
+        LayoutGroup("Notes tab", L.notes, SECTIONS + ("today" to "Today"), moveLabel = "→ Today", onMove = { k -> val it = L.notes.first { p -> p.first == k }; ui.saveLayout(ui.layout.copy(notes = L.notes - it, today = L.today + it)) }) { ui.saveLayout(ui.layout.copy(notes = it)) }
         LayoutGroup("Almanac", L.almanac, ALMANAC_WIDGETS) { ui.saveLayout(ui.layout.copy(almanac = it)) }
     }
 }
@@ -232,11 +233,12 @@ fun MindfulEditor() {
 }
 
 @Composable
-private fun LayoutGroup(title: String, list: List<Pair<String, Boolean>>, labels: Map<String, String>, save: (List<Pair<String, Boolean>>) -> Unit) {
+private fun LayoutGroup(title: String, list: List<Pair<String, Boolean>>, labels: Map<String, String>, moveLabel: String? = null, onMove: ((String) -> Unit)? = null, save: (List<Pair<String, Boolean>>) -> Unit) {
     Kicker(title, Modifier.padding(top = 16.dp, bottom = 2.dp))
     list.forEachIndexed { i, (k, on) ->
         Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(labels[k] ?: k, Modifier.weight(1f), color = LocalInk.current.ink)
+            if (moveLabel != null && onMove != null && list.size > 1) Text(moveLabel.uppercase(), Modifier.clip(RoundedCornerShape(6.dp)).clickable { onMove(k) }.padding(horizontal = 8.dp, vertical = 8.dp), fontFamily = Mono, fontSize = 10.sp, letterSpacing = 1.sp, color = LocalInk.current.mute)
             if (i > 0) IconBtn(Icons.Outlined.ArrowUpward, "Move up", { val m = list.toMutableList(); val x = m.removeAt(i); m.add(i - 1, x); save(m) }, size = 17.dp)
             Toggle(on) { v -> if (title == "Tabs" && !v && list.count { it.second } <= 1) return@Toggle; save(list.toMutableList().also { it[i] = k to v }) }
         }

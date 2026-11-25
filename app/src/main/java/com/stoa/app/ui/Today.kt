@@ -80,12 +80,7 @@ fun TodayPage() {
     val ui = LocalUi.current
     val subs = ui.layout.on(ui.layout.today).ifEmpty { listOf("today") }
     SubPaged("Today", LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE  d MMMM")), "today", subs.map { it to (if (it == "today") "Today" else SECTIONS[it] ?: it) }, ui.todaySub, { ui.todaySub = it }) { s ->
-        when (s) {
-            "reading" -> ReadingView()
-            "still" -> StillView()
-            "writing" -> { Writing(); BookTasks(); WritingPieces() }
-            else -> TodayView()
-        }
+        SubContent(s)
     }
 }
 
@@ -410,5 +405,22 @@ fun ReadingThoughts(book: String) {
                 scope.launch { E.addReadingNote(ctx, book, page, t, imgs) }
             }, primary = true, small = true, icon = Icons.Outlined.Check)
         }
+    }
+}
+
+/** Any sub-page, wherever it lives (Today or Notes) — so they can be moved between pages. */
+@Composable
+fun SubContent(s: String) {
+    when (s) {
+        "today" -> TodayView()
+        "reading" -> ReadingView()
+        "still" -> StillView()
+        "writing" -> { Writing(); BookTasks(); WritingPieces() }
+        "tasks" -> TasksPipeline()
+        "ideas" -> Ideas()
+        "canvas" -> CanvasList()
+        "shots" -> Shots()
+        "gym" -> GymView()
+        else -> TodayView()
     }
 }

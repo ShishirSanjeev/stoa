@@ -88,15 +88,8 @@ import java.time.format.DateTimeFormatter
 fun NotesPage() {
     val ui = LocalUi.current
     val subs = ui.layout.on(ui.layout.notes).ifEmpty { listOf("tasks") }
-    SubPaged("Notes", null, "notes", subs.map { it to (when (it) { "tasks" -> "Tasks"; "shots" -> "Shots"; else -> SECTIONS[it] ?: it }) }, ui.notesSub, { ui.notesSub = it }) { s ->
-        when (s) {
-            "ideas" -> Ideas()
-            "canvas" -> CanvasList()
-            "shots" -> Shots()
-            "gym" -> GymView()
-            "writing" -> { Writing(); BookTasks(); WritingPieces() }
-            else -> TasksPipeline()
-        }
+    SubPaged("Notes", null, "notes", subs.map { it to (when (it) { "tasks" -> "Tasks"; "shots" -> "Shots"; "today" -> "Today"; else -> SECTIONS[it] ?: it }) }, ui.notesSub, { ui.notesSub = it }) { s ->
+        SubContent(s)
     }
 }
 
